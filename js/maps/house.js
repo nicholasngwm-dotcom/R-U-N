@@ -1128,28 +1128,48 @@ World.maps.house = function (api) {
   {
     const C = L.cellar;
     onFloor(2);
-    const run = (C.highRow - C.lowRow + 1) * CELL, depth = run / C.steps;
-    const x0 = ex(C.c0), x1 = ex(C.c1 + 1), zL = ez(C.lowRow);
+    const sg = Math.sign(C.lowRow - C.highRow);                  // +1: the steps climb north
+    const run = (Math.abs(C.highRow - C.lowRow) + 1) * CELL, depth = run / C.steps;
+    const x0 = ex(C.c0), x1 = ex(C.c1 + 1), zL = sg > 0 ? ez(C.lowRow + 1) : ez(C.lowRow);
     for (let k = 1; k <= C.steps; k++) {
-      const zA = zL + (k - 1) * depth;
-      box((x0 + x1) / 2, 0, zA + depth / 2, x1 - x0, k * C.rise, depth, woodMat);
-      box((x0 + x1) / 2, k * C.rise, zA + 0.03, x1 - x0, 0.015, 0.06, ironMat, false);     // worn metal nosing
+      const zA = zL - sg * (k - 1) * depth, zm = zA - sg * depth / 2;
+      box((x0 + x1) / 2, 0, zm, x1 - x0, k * C.rise, depth, gardenStone);
+      box((x0 + x1) / 2, k * C.rise, zA - sg * (depth - 0.03), x1 - x0, 0.015, 0.06, ironMat, false);   // worn edge
     }
     // a hand rope along the wall
     const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, Math.hypot(run, C.steps * C.rise)), ropeMat);
-    rope.position.set(x0 + 0.08, C.steps * C.rise / 2 + 0.9, zL + run / 2);
-    rope.rotation.x = Math.PI / 2 - Math.atan2(C.steps * C.rise, run);
+    rope.position.set(x0 + 0.08, C.steps * C.rise / 2 + 0.9, zL - sg * run / 2);
+    rope.rotation.x = -sg * (Math.PI / 2 - Math.atan2(C.steps * C.rise, run));
     add(rope);
-    // railing round the opening on the ground floor (open on the south side, where you step down)
+    // up in the garden: a low stone surround on three sides, the two old cellar doors flung open on either side,
+    // and you step in from the end the steps climb toward
     onFloor(0);
+    const entry = [0, -sg];                                      // the open side
+    let minC = W, maxC = 0, minR = H, maxR = 0;
     for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
       if (get(c, r) !== 'd') continue;
-      for (const [dc, dr] of [[1, 0], [-1, 0], [0, -1]]) {
+      minC = Math.min(minC, c); maxC = Math.max(maxC, c); minR = Math.min(minR, r); maxR = Math.max(maxR, r);
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (dc === entry[0] && dr === entry[1]) continue;
         if (get(c + dc, r + dr) === 'd' || isWallish(get(c + dc, r + dr))) continue;
-        if (dc) { const x = dc > 0 ? ex(c + 1) : ex(c); box(x, 0, cz(r), 0.08, 1.0, CELL, null); box(x, 0.95, cz(r), 0.1, 0.06, CELL, darkWoodMat, false); for (const t of [-0.5, 0, 0.5]) box(x, 0, cz(r) + t, 0.05, 0.95, 0.05, darkWoodMat, false); }
-        else { const z = dr > 0 ? ez(r + 1) : ez(r); box(cx(c), 0, z, CELL, 1.0, 0.08, null); box(cx(c), 0.95, z, CELL, 0.06, 0.1, darkWoodMat, false); }
+        if (dc) { const x = dc > 0 ? ex(c + 1) : ex(c); box(x, 0, cz(r), 0.3, 0.75, CELL, gardenStone); }
+        else { const z = dr > 0 ? ez(r + 1) : ez(r); box(cx(c), 0, z, CELL + 0.3, 0.75, 0.3, gardenStone); }
       }
     }
+    // the two doors: heavy planks with iron straps, lying open on the grass to each side
+    const dz0 = ez(minR), dz1 = ez(maxR + 1), dlen = dz1 - dz0 - 0.2, dw = (ex(maxC + 1) - ex(minC)) / 2;
+    for (const side of [-1, 1]) {
+      const g = new THREE.Group();
+      const hx = side < 0 ? ex(minC) - 0.15 : ex(maxC + 1) + 0.15;
+      g.position.set(hx + side * dw / 2, 0.8, (dz0 + dz1) / 2);
+      g.rotation.z = side * -0.35;                               // tipped back against the surround
+      g.add(mesh(new THREE.BoxGeometry(dw, 0.08, dlen), darkWoodMat, 0, 0, 0));
+      for (const t of [-0.35, 0, 0.35]) g.add(mesh(new THREE.BoxGeometry(dw + 0.02, 0.1, 0.06), ironMat, 0, 0, t * dlen));
+      g.add(mesh(new THREE.TorusGeometry(0.07, 0.015, 4, 10), ironMat, side * -dw * 0.3, 0.06, 0).rotateX(Math.PI / 2));
+      bake(g);
+    }
+    // a lamp glowing faintly down the steps
+    const cl = new THREE.PointLight(0xffb070, 0.45, 7, 2); cl.position.set((x0 + x1) / 2, -1.5, (dz0 + dz1) / 2); scene.add(cl);
   }
 
   // =====================================================================
@@ -1595,10 +1615,16 @@ World.maps.house = function (api) {
     const drum = mesh(new THREE.CylinderGeometry(0.11, 0.11, 1.55, 10), darkWoodMat); drum.rotation.z = Math.PI / 2; axle.add(drum);
     for (let k = 0; k < 5; k++) { const turn = mesh(new THREE.TorusGeometry(0.12, 0.018, 4, 12), ropeMat, -0.3 + k * 0.08, 0, 0); turn.rotation.y = Math.PI / 2; axle.add(turn); }
     const rope = mesh(new THREE.CylinderGeometry(0.015, 0.015, 1, 5), ropeMat); scene.add(rope);
+    // the bucket: wooden staves, two iron hoops, a dark wet inside, an iron handle arching over it.
+    // Its origin is the top of the handle, where the rope ties on.
     const bucket = new THREE.Group(); scene.add(bucket);
-    bucket.add(mesh(new THREE.CylinderGeometry(0.17, 0.13, 0.3, 12, 1, true), woodMat, 0, -0.15, 0));
-    bucket.add(mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.02, 12), darkWoodMat, 0, -0.29, 0));
-    const handle = mesh(new THREE.TorusGeometry(0.17, 0.01, 4, 12, Math.PI), ironMat, 0, 0, 0); bucket.add(handle);
+    const staves = new THREE.MeshStandardMaterial({ color: lin(0x5a3a20), roughness: 0.85, side: THREE.DoubleSide });
+    const wet = new THREE.MeshStandardMaterial({ color: lin(0x120c08), roughness: 0.4, side: THREE.BackSide });
+    bucket.add(mesh(new THREE.CylinderGeometry(0.2, 0.16, 0.34, 14, 1, true), staves, 0, -0.36, 0));
+    bucket.add(mesh(new THREE.CylinderGeometry(0.195, 0.155, 0.335, 14, 1, true), wet, 0, -0.36, 0));
+    bucket.add(mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 14), darkWoodMat, 0, -0.52, 0));
+    for (const [y, r] of [[-0.24, 0.196], [-0.46, 0.168]]) bucket.add(mesh(new THREE.TorusGeometry(r, 0.012, 5, 18), ironMat, 0, y, 0).rotateX(Math.PI / 2));
+    bucket.add(mesh(new THREE.TorusGeometry(0.2, 0.011, 5, 14, Math.PI), ironMat, 0, -0.2, 0));   // the handle
     const socket = mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), ironMat, x + 0.95, 1.6, z); scene.add(socket);
     // the crank, put together from the three parts (hidden until you fit it)
     const crank = new THREE.Group(); crank.position.set(x + 0.98, 1.6, z); scene.add(crank);
@@ -1866,11 +1892,13 @@ World.maps.house = function (api) {
     const kx = xm + dw / 4, ky = 1.45, kz = z0 + 0.24;
     const screen = document.createElement('canvas'); screen.width = 256; screen.height = 96;
     const screenTex = new THREE.CanvasTexture(screen); screenTex.encoding = THREE.sRGBEncoding;
-    const plate = new THREE.Group(); plate.position.set(kx, ky, kz); scene.add(plate);
+    // fixed to the right-hand door leaf, so it swings open with it
+    const leafR = leaves.find(l => l.side > 0).pivot;
+    const plate = new THREE.Group(); plate.position.set(kx - leafR.position.x, ky, kz - leafR.position.z); leafR.add(plate);
     plate.add(mesh(new THREE.BoxGeometry(0.42, 0.24, 0.04), brassMat, 0, 0, 0));
     const face = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.13), new THREE.MeshBasicMaterial({ map: screenTex }));
     face.position.set(0, 0.01, -0.021); face.rotation.y = Math.PI; plate.add(face);
-    const keyLight = new THREE.PointLight(0xffd9a0, 0.25, 1.6, 2); keyLight.position.set(kx, ky + 0.1, kz - 0.4); scene.add(keyLight);
+    const keyLight = new THREE.PointLight(0xffd9a0, 0.25, 1.6, 2); keyLight.position.set(0, 0.1, -0.4); plate.add(keyLight);
     // porch + moonlight outside
     box(xm, -0.5, z1 + 3, dw + 3, 0.5, 6, stoneMat);
     const moon = new THREE.PointLight(0x8fa8d8, 0.9, 14, 2);

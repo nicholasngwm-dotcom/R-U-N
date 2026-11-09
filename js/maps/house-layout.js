@@ -12,11 +12,11 @@
 //   B  bed     c  toilet    u  bathtub    i  sink         e  stove          r  fridge
 // Ground floor only:
 //   s  grand staircase (18 steps of 0.3 m, rising north)    E  front door (3 padlocks + a code)
-//   d  the opening of the cellar stairs (railed off, step down from its south side)
+//   d  the cellar doors in the garden: steps going down to the basement (walled round, step in from the north)
 //   y  garden (grass)   Z  garden wall 3.6 m    h  hedge 2.4 m    T  tree    G  gravestone (vault)
 //   o  the well         L  ladder up the back of the house to the bedroom window above
 // Basement only:
-//   z  steep cellar stairs (9 steps of 0.4 m, rising south up to the laundry)
+//   z  steep cellar stairs (9 steps of 0.4 m, rising north up to the garden)
 //   C  the old car      K  workbench (build the crank handle here)    p  concrete pillar
 //   Q  the garage door (rusted shut)
 // Upper floor only:
@@ -72,9 +72,8 @@ const HouseLayout = (function () {
   rect(g0, 1, 21, 1, 27, 'b'); set(g0, 4, 19, 'F'); cells(g0, [[5, 23], [6, 23]], 'j');
   // downstairs toilet
   set(g0, 14, 19, 'c'); set(g0, 12, 19, 'i');
-  // laundry (+ the way down to the cellar)
+  // laundry
   rect(g0, 11, 29, 13, 29, 'k');
-  rect(g0, 12, 25, 13, 27, 'd');
   // back hall
   set(g0, 16, 19, 'g'); set(g0, 19, 26, 't');
   // kitchen
@@ -97,6 +96,7 @@ const HouseLayout = (function () {
   cells(g0, [[3, 3], [32, 3], [10, 9], [24, 9], [3, 15], [33, 15]], 'T'); // dead trees
   cells(g0, [[30, 7], [32, 7], [30, 9], [32, 9], [31, 11]], 'G');          // the family plot
   set(g0, 4, 17, 'L');                                                     // ladder up to the bedroom window
+  rect(g0, 7, 14, 8, 16, 'd');                                             // the cellar doors: steps down to the basement
 
   // =====================================================================
   // UPPER FLOOR
@@ -155,8 +155,8 @@ const HouseLayout = (function () {
   // =====================================================================
   rect(g2, 2, 16, 21, 25, '#');
   rect(g2, 3, 17, 20, 24, '.');
-  rect(g2, 11, 25, 14, 28, '#');
-  rect(g2, 12, 25, 13, 27, 'z');                       // cellar stairs, rising south to the laundry
+  rect(g2, 6, 13, 9, 16, '#');
+  rect(g2, 7, 14, 8, 16, 'z');                         // cellar stairs, rising north up to the garden doors
   cells(g2, [[2, 19], [2, 20], [2, 21]], 'Q');         // the garage door (rusted shut)
   rect(g2, 5, 19, 6, 22, 'C');                         // the car
   rect(g2, 15, 17, 19, 17, 'K');                       // the workbench along the north wall
@@ -164,7 +164,7 @@ const HouseLayout = (function () {
   rect(g2, 20, 19, 20, 22, 'b');                       // shelves of jars and tins
   rect(g2, 3, 24, 5, 24, 'b');
   set(g2, 20, 24, 'X'); set(g2, 10, 17, 'S'); set(g2, 3, 17, 'S');
-  const cellar = { c0: 12, c1: 13, lowRow: 25, highRow: 27, steps: 9, rise: 0.4 };
+  const cellar = { c0: 7, c1: 8, lowRow: 16, highRow: 14, steps: 9, rise: 0.4 };
 
   // ---------- searchable drawers + lockers on the ground floor / garden ----------
   cells(g0, [[8, 25], [1, 29], [14, 25], [16, 24], [34, 24], [11, 38], [1, 42], [22, 35], [34, 36], [29, 42], [1, 10], [34, 4]], 'S');
@@ -192,7 +192,7 @@ const HouseLayout = (function () {
     Z(1, 'ensuite', 1, 31, 4, 34, 'bath', 'tile', { bedroom: 'master bedroom' }),
     Z(1, 'master bedroom', 1, 31, 11, 42, 'bedroom', 'wood', { bedroom: true }),
     Z(1, 'guest bedroom', 24, 31, 34, 42, 'guest', 'wood', { bedroom: true }),
-    Z(2, 'basement', 3, 17, 20, 28, 'concrete', 'concrete'),
+    Z(2, 'basement', 3, 13, 20, 24, 'concrete', 'concrete'),
   ];
   const hall = { name: 'hall', wall: 'hall', floor: null, hall: true };
 
@@ -205,7 +205,7 @@ const HouseLayout = (function () {
     [7, 20.5, 2, true], [17, 19.5, 2], [12, 23, 2, true],          // bare bulbs in the basement
   ];
   // lanterns in the garden: [col, row]
-  const lanterns = [[17, 10], [17.5, 16.5], [8, 16]];
+  const lanterns = [[17, 10], [17.5, 16.5], [10, 15.5]];
 
   // carpet runners down the halls, rugs in rooms (cell rects, per floor)
   const runners = [{ f: 0, c0: 16, r0: 19, c1: 19, r1: 30 }, { f: 1, c0: 16, r0: 19, c1: 19, r1: 30 }];

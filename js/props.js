@@ -66,6 +66,7 @@ const Props = (function () {
       m.position.copy(p.pos);
       scene.add(m);
       p.focus.copy(p.pos);
+      p.home = p.pos.clone(); p.homeYaw = s.yaw || 0;
       list.push(p);
       world.interactables.push(p);
       setRestCollider(p);
@@ -94,6 +95,32 @@ const Props = (function () {
     if (axis === 'y' && d < 0) { p.vel.x *= 0.7; p.vel.z *= 0.7; p.grounded = true; p.spin.multiplyScalar(0.6); }
     else { p.spin.multiplyScalar(0.8); }
     return imp;
+  }
+  // if it's overlapping something, push it out the shortest way (never "up and over" a wall)
+  function depenetrate(p) {
+    const h = p.half;
+    for (let it = 0; it < 6; it++) {
+      const b = overlaps(p, p.pos.x, p.pos.y, p.pos.z);
+      if (!b) return true;
+      let best = null, bd = Infinity;
+      for (const [a, v] of [['x', b.min.x - h.x - 2e-3], ['x', b.max.x + h.x + 2e-3], ['y', b.min.y - h.y - 2e-3], ['y', b.max.y + h.y + 2e-3], ['z', b.min.z - h.z - 2e-3], ['z', b.max.z + h.z + 2e-3]]) {
+        const d = Math.abs(v - p.pos[a]);
+        if (d < bd) { bd = d; best = [a, v]; }
+      }
+      p.pos[best[0]] = best[1];
+    }
+    return !overlaps(p, p.pos.x, p.pos.y, p.pos.z);
+  }
+  // safety net: out of the house, or fallen out of the world -> back where it last sat
+  const HALF_W = world => (world.layout ? world.layout.W * world.layout.CELL / 2 : 1e9);
+  function lost(p) {
+    const L = world.layout, hw = HALF_W(world), hh = L ? L.H * L.CELL / 2 : 1e9;
+    return p.pos.y < -8 || Math.abs(p.pos.x) > hw || Math.abs(p.pos.z) > hh;
+  }
+  function sendHome(p) {
+    p.pos.copy(p.home); p.vel.set(0, 0, 0); p.spin.set(0, 0, 0);
+    p.mesh.quaternion.setFromEuler(e.set(0, p.homeYaw, 0));
+    p.state = 'rest'; p.restBox = null;
   }
   function setRestCollider(p) {
     if (p.propType !== 'chair' || p.collider) return;
@@ -176,6 +203,7 @@ const Props = (function () {
     const p = holding;
     if (!p) return;
     holding = null; p.held = false; p.state = 'fly'; p.grounded = false;
+    if (!depenetrate(p)) { p.pos.copy(camera.position).addScaledVector(camDir.set(0, -1, 0), 0.6); depenetrate(p); }
     // throw velocity = how fast it was moving over the last ~80 ms
     const now = hist[hist.length - 1], old = hist.find(h => now && now.t - h.t <= 0.09) || now;
     if (throwIt && now && old && now.t > old.t) {
@@ -222,10 +250,12 @@ const Props = (function () {
     const k = Math.min(1, dt * 30);
     const vx = (tgt.x - p.pos.x) * k / dt, vy = (tgt.y - p.pos.y) * k / dt, vz = (tgt.z - p.pos.z) * k / dt;
     p.vel.set(vx, vy, vz);
-    for (const a of ['x', 'y', 'z']) {
-      p.pos[a] += p.vel[a] * dt;
-      const b = overlaps(p, p.pos.x, p.pos.y, p.pos.z);
-      if (b) { const h = p.half[a]; p.pos[a] = p.vel[a] > 0 ? b.min[a] - h - 1e-4 : b.max[a] + h + 1e-4; }
+    depenetrate(p);
+    const n = Math.max(1, Math.ceil(Math.hypot(vx, vy, vz) * dt / 0.08));      // small steps: never skip through a thin wall
+    for (let i = 0; i < n; i++) for (const a of ['x', 'y', 'z']) {
+      const old = p.pos[a];
+      p.pos[a] += p.vel[a] * dt / n;
+      if (overlaps(p, p.pos.x, p.pos.y, p.pos.z)) p.pos[a] = old;               // blocked: stay on this side
     }
     // face away from you, upright
     e.set(0, player.yaw + Math.PI, 0); q.setFromEuler(e);
@@ -238,6 +268,7 @@ const Props = (function () {
   }
 
   function step(p, dt) {
+    depenetrate(p);
     p.vel.y -= G * dt;
     p.grounded = false;
     const ix = moveAxis(p, 'x', p.vel.x * dt);
@@ -253,7 +284,7 @@ const Props = (function () {
       p.mesh.quaternion.premultiply(q);
     }
     if (p.grounded && p.vel.lengthSq() < 0.06) settle(p);
-    if (p.pos.y < -10) { p.alive = false; scene.remove(p.mesh); }
+    if (lost(p)) sendHome(p);
   }
   // came to rest: lie upright, or on its side if it landed that way
   function settle(p) {
@@ -268,6 +299,7 @@ const Props = (function () {
     bb.setFromObject(p.mesh);
     const lift = (p.pos.y - p.half.y) - bb.min.y;              // sit on the floor exactly
     p.pos.y += lift;
+    p.home = p.pos.clone(); p.homeYaw = yaw;
     p.restBox = { min: { x: bb.min.x + 0.03, y: bb.min.y + lift, z: bb.min.z + 0.03 }, max: { x: bb.max.x - 0.03, y: bb.max.y + lift, z: bb.max.z - 0.03 } };
   }
 

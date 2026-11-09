@@ -1,7 +1,7 @@
 // Objective + interaction.
 //   Find the 3 keys (in drawers around the house) -> open the 3 padlocks on the front door.
 //   Find the 3 crank parts (in a drawer in each bedroom) -> build the crank handle at the workbench in the basement
-//   -> fit it to the well in the garden -> wind up the bucket -> the brass tag on it has the 4-digit code
+//   -> fit it to the well in the garden -> wind up the bucket -> the paper inside it has the 4-digit code
 //   -> type it into the lock on the front door.
 //   Both done -> the door opens -> escape.
 // Also: notes, medkits, hiding in lockers, picking things up (props.js), and the "key" test cheat.
@@ -19,9 +19,9 @@ const Game = (function () {
   const INTRO = "If you are reading this, it already knows you are here.\n\nThe front door will not open for you. Not yet.\n\nI hid everything you will need in the drawers of this house. Open them. All of them.\n\nIt hears the drawers. I am sorry. There was no other way.";
   const CLUES = [
     { tag: 'keys', text: "I chained the front door and hung three padlocks on the chain. I gave a key to each of the children.\n\nThey hid them in the drawers, like it was a game.\n\nI can't find the keys now. I can't find the children either." },
-    { tag: 'code', text: "There is a second lock, set into the door itself. It wants four numbers.\n\nI stamped them on a brass tag and tied it to the bucket in the garden well. Then I let the bucket down, all the way to the bottom." },
+    { tag: 'code', text: "There is a second lock, set into the door itself. It wants four numbers.\n\nI wrote them on a scrap of paper and put it in the bucket of the garden well. Then I let the bucket down, all the way to the bottom." },
     { tag: 'crank', text: "I took the crank off the well winch and broke it into three pieces, so it could never be wound up again.\n\nOne piece went into a drawer in each of the bedrooms upstairs." },
-    { tag: 'bench', text: "The crank pieces won't hold together in your hands. Father's vise is on the workbench in the cellar. The stairs go down from the laundry.\n\nIt follows you down there too. It has to crawl. It still follows." },
+    { tag: 'bench', text: "The crank pieces won't hold together in your hands. Father's vise is on the workbench in the cellar. The cellar doors are out in the garden, by the ladder.\n\nIt follows you down there too. It has to crawl. It still follows." },
   ];
   // the rest: things the family learned about it, found at random once the clues are out
   const LORE = [
@@ -240,6 +240,25 @@ const Game = (function () {
     }
     drawKeypad();
     updateInventory();
+    if (well) {
+      // a folded scrap of paper wedged in the bucket, the four numbers scrawled on it big enough to read
+      const tex = canvasTex(256, 320, (g, w, h) => {
+        g.fillStyle = '#ddd2b4'; g.fillRect(0, 0, w, h);
+        for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(70,50,25,${Math.random() * 0.15})`; g.fillRect(Math.random() * w, Math.random() * h, 3, 3); }
+        g.fillStyle = 'rgba(90,60,30,0.2)'; g.fillRect(0, h / 2 - 2, w, 4); g.fillRect(w / 2 - 2, 0, 4, h);   // fold lines
+        g.fillStyle = '#1c120a'; g.font = 'bold 92px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        st.code.split('').forEach((ch, i) => { g.save(); g.translate(w * (0.2 + i * 0.2), h * 0.47 + (Math.random() - 0.5) * 18); g.rotate((Math.random() - 0.5) * 0.25); g.fillText(ch, 0, 0); g.restore(); });
+        g.strokeStyle = 'rgba(28,18,10,0.6)'; g.lineWidth = 3;
+        for (const [x0, yy] of [[30, 0.72], [40, 0.76]]) {                                                     // underlined twice
+          g.beginPath(); g.moveTo(x0, h * yy); for (let x = x0; x < w - 40; x += 8) g.lineTo(x, h * yy + (Math.random() - 0.5) * 6); g.stroke();
+        }
+      });
+      const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.21), new THREE.MeshStandardMaterial({ map: tex, roughness: 1, side: THREE.DoubleSide, emissive: new THREE.Color(0x1a1408) }));
+      paper.position.set(0.02, -0.22, 0.05); paper.rotation.set(-0.45, 0.3, 0.06);          // sticking up out of the bucket
+      well.bucket.add(paper);
+      well.paper = paper;
+      const glow = new THREE.PointLight(0xffe2b0, 0, 1.2, 2); glow.position.set(0, -0.05, 0.25); well.bucket.add(glow); well.paperGlow = glow;
+    }
   }
 
   // ---------- helpers ----------
@@ -278,7 +297,27 @@ const Game = (function () {
     const m = makeNote();
     if (d.slots && d.slots.length) placeIn(d, m, d.slots);
     else { m.position.set(0, d.area.y + 0.02, (d.area.z0 + d.area.z1) / 2); d.group.add(m); }
-    d.note = text; d.intro = intro; d.noteTag = tag;
+    d.note = text; d.intro = intro; d.noteTag = tag; d.noteMesh = m;
+  }
+  // a drawer can hold several things (a key, a medkit, a note...): E takes whichever one you're looking at
+  const _ip = new THREE.Vector3();
+  function drawerChoice(d) {
+    const list = [];
+    if (d.key) list.push({ kind: 'key', obj: d.key });
+    if (d.part) list.push({ kind: 'part', obj: d.part.mesh });
+    if (d.medkit) list.push({ kind: 'medkit', obj: d.medkit });
+    if (d.note) list.push({ kind: 'note', obj: d.noteMesh });
+    if (list.length <= 1) return { pick: list[0], count: list.length };
+    camera.getWorldDirection(fwd);
+    let pick = null, best = -2;
+    for (const it of list) {
+      if (!it.obj) continue;
+      it.obj.getWorldPosition(_ip).sub(camera.position).normalize();
+      let dot = _ip.dot(fwd);
+      if (it.kind === 'note' && d.intro && !d.introRead) dot += 0.004;      // the first note wins a tie
+      if (dot > best) { best = dot; pick = it; }
+    }
+    return { pick: pick || list[0], count: list.length };
   }
   function finishSearch(it) {
     it.searched = true;
@@ -529,18 +568,19 @@ const Game = (function () {
         // an old winch shrieks as it turns: it carries a long way
         if ((squeakT -= dt) <= 0) { Sfx.squeak(); squeakT = 0.38 + Math.random() * 0.12; }
         if ((windNoiseT -= dt) <= 0) { events.push({ type: 'noise', kind: 'crank', x: w.x, y: 1, z: w.z, radius: 18 }); windNoiseT = 0.5; }
-        if (w.wound >= 1) { w.raised = true; hold = 0; Sfx.thump(120, 0.15, 0.35); Sfx.burst(1800, 0.1, 0.12); toast('The bucket comes up out of the dark.  Something is tied to the handle.', 3.5); }
+        if (w.wound >= 1) { w.raised = true; hold = 0; Sfx.thump(120, 0.15, 0.35); Sfx.burst(1800, 0.1, 0.12); toast('The bucket comes up out of the dark.  There is a folded paper inside it.', 3.5); }
       }
       ui.prompt(w.raised ? null : 'Hold [E]  Wind up the bucket', w.wound);
       return;
     }
-    ui.prompt('[E]  Look at the tag', 0);
+    ui.prompt('[E]  Take the paper from the bucket', 0);
     if (input.ePressed) {
       w.done = true;
       st.codeKnown = true;
       Sfx.keyPickup();
       updateInventory();
-      readNote(`A brass tag, tied to the bucket handle with wire.\n\nFour numbers are stamped into it:\n\n${st.code.split('').join('   ')}`);
+      if (w.paper) { w.bucket.remove(w.paper); w.paper = null; }
+      readNote(`A scrap of paper, damp from the well.\n\nFour numbers, written hard enough to tear it:\n\n${st.code.split('').join('   ')}`);
       if (reveal) placeReveal();
     }
   }
@@ -574,10 +614,11 @@ const Game = (function () {
     if (!well) return;
     const w = well;
     const d = (1 - w.wound) * w.deep;
-    const by = w.top - 0.25 - 0.6 - d;
-    w.bucket.position.set(w.x, by + 0.3, w.z);
-    w.bucket.visible = d < 1.4;                         // hidden down in the dark until it's near the top
-    const len = w.top - (by + 0.3);
+    const hy = w.top - 0.08 - d;                         // where the rope ties onto the handle: wound right up, it hangs clear above the rim
+    w.bucket.position.set(w.x, hy, w.z);
+    w.bucket.visible = d < 1.8;                          // hidden down in the dark until it's near the top
+    if (w.paperGlow) w.paperGlow.intensity = w.raised && w.paper ? 0.35 : 0;   // the paper catches a little light
+    const len = w.top - hy;
     w.rope.scale.set(1, Math.max(0.01, len), 1);
     w.rope.position.set(w.x, w.top - len / 2, w.z);
     w.axle.rotation.x = -w.wound * 40;
@@ -720,11 +761,19 @@ const Game = (function () {
       } else hold = Math.max(0, hold - dt * 2);
       ui.prompt(target.searched ? null : 'Hold [E]  Search', hold / SEARCH_TIME);
     } else if (target.type === 'drawer') {
-      ui.prompt(target.intro && !target.introRead ? '[E]  Read the note' : target.key ? '[E]  Take the key' : target.part ? (st.know.crank ? '[E]  Take the crank piece' : '[E]  Take the iron piece') : target.medkit ? '[E]  Use the medkit' : '[E]  Read the note', 0);
+      const { pick, count } = drawerChoice(target);
+      const k = pick ? pick.kind : 'note';
+      const label = k === 'key' ? '[E]  Take the key' : k === 'part' ? (st.know.crank ? '[E]  Take the crank piece' : '[E]  Take the iron piece') : k === 'medkit' ? '[E]  Use the medkit' : '[E]  Read the note';
+      ui.prompt(count > 1 ? label + '      (look at the other things in the drawer for them)' : label, 0);
       if (input.ePressed) {
-        if (target.intro && !target.introRead) { target.introRead = true; readNote(target.note); }
-        else if (target.key) takeKey(target); else if (target.part) takePart(target); else if (target.medkit) useMedkit(target);
-        else { readNote(target.note); if (target.noteTag) { st.know[target.noteTag] = true; if (target.noteTag === 'crank') st.know.parts = true; updateInventory(); } }
+        if (k === 'key') takeKey(target);
+        else if (k === 'part') takePart(target);
+        else if (k === 'medkit') useMedkit(target);
+        else {
+          if (target.intro) target.introRead = true;
+          readNote(target.note);
+          if (target.noteTag) { st.know[target.noteTag] = true; if (target.noteTag === 'crank') st.know.parts = true; updateInventory(); }
+        }
       }
     } else if (target.type === 'bench') {
       useBench(input, dt);
