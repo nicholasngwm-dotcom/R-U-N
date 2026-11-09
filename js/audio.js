@@ -168,6 +168,20 @@ const Sfx = {
     for (let i = 0; i < 9; i++) this.tone(2000 + Math.random() * 4000, 0.06 + Math.random() * 0.1, 0.03 + Math.random() * 0.04, 'sine', Math.random() * 0.35);
   },
 
+  // it arrives: the garage door is wrenched up somewhere far below — a long, grinding metal scream and a boom
+  garageDoor(k = 0.5) {
+    const c = this.ctx; if (!c) return;
+    const t = c.currentTime, out = c.createGain(); out.gain.value = 0.35 + 0.6 * k; out.connect(this.master);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500 + 2500 * k; lp.connect(out);   // muffled through the floors
+    const n = this.noiseSrc(t, 2.4), bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(300, t); bp.frequency.linearRampToValueAtTime(900, t + 2); bp.Q.value = 3;
+    const ng = c.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.5, t + 0.3); ng.gain.setValueAtTime(0.5, t + 1.8); ng.gain.exponentialRampToValueAtTime(0.0001, t + 2.3);
+    n.connect(bp); bp.connect(ng); ng.connect(lp);
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(70, t); o.frequency.linearRampToValueAtTime(110, t + 2);
+    const og = c.createGain(); og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.25, t + 0.4); og.gain.exponentialRampToValueAtTime(0.0001, t + 2.3);
+    o.connect(og); og.connect(lp); o.start(t); o.stop(t + 2.4);
+    setTimeout(() => { this.thump(45, 1.0, 0.6 + 0.6 * k); this.burst(400 + 1200 * k, 0.6, 0.25 + 0.3 * k); }, 2300);
+  },
+
   lockerDoor() { this.thump(220, 0.08, 0.2); this.burst(2600, 0.1, 0.12); this.tone(380, 0.25, 0.04, 'triangle'); },
   win() { [392, 494, 587, 784].forEach((f, i) => this.tone(f, 1.6, 0.07, 'triangle', i * 0.18)); },
 
@@ -342,29 +356,73 @@ const Sfx = {
   },
 
   // one of its feet slamming down. k: 0 (far away) .. 1 (right on top of you) — closer = louder, deeper, longer
-  entityStep(k, pan = 0, crawl = 0) {
-    const c = this.ctx; if (!c || k <= 0.01) return;
-    const t = c.currentTime, out = this.bus(crawl > 0.5 ? 1.0 : 1.6, pan * (1 - k * 0.4));
-    // the impact: a deep sine dropping in pitch, muffled when it's far (through walls)
+  // a sound placed in 3D around your head (HRTF): rel = { x: right, y: up, z: back } in metres, relative to you.
+  // Distance loudness is done by the caller; this only gives direction (left/right, front/back, a little up/down).
+  spatial(rel) {
+    const c = this.ctx;
+    const g = c.createGain();
+    if (c.createPanner) {
+      const p = c.createPanner();
+      p.panningModel = 'HRTF'; p.distanceModel = 'linear'; p.rolloffFactor = 0; p.refDistance = 1; p.maxDistance = 10000;
+      const len = Math.hypot(rel.x, rel.y, rel.z) || 1, sc = 2 / len;           // a fixed 2 m away: only the direction matters
+      if (p.positionX) { p.positionX.value = rel.x * sc; p.positionY.value = rel.y * sc; p.positionZ.value = rel.z * sc; }
+      else p.setPosition(rel.x * sc, rel.y * sc, rel.z * sc);
+      g.connect(p); p.connect(this.master);
+    } else g.connect(this.master);
+    return g;
+  },
+
+  // the entity's footstep.
+  //   near    0..1  how close it is (1 = right on top of you, ~0.1 = far across the house)
+  //   rel     direction to it, around your head (see spatial)
+  //   through null (same floor) | 'above' | 'below'  — a floor between you muffles it into a deep thud
+  //   crawl   flattened out: lighter, scrabbling
+  entityStep({ near, rel, through = null, crawl = 0 }) {
+    const c = this.ctx; if (!c || near <= 0.004) return;
+    const t = c.currentTime;
+    const out = this.spatial(rel);
+    const thru = !!through;
+    out.gain.value = (crawl > 0.5 ? 0.65 : 1) * (thru ? 0.55 : 1);
+    // brightness falls away with distance (close = a sharp crack, far = a dull knock); a floor in between leaves only the boom
+    const bright = thru ? 90 + 160 * near : 160 + 2400 * near * near;
+    // 1) the impact: a deep sine dropping in pitch
     const o = c.createOscillator();
-    const f0 = 72 - k * 30;
-    o.frequency.setValueAtTime(f0 * 1.7, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.42, t + 0.3 + k * 0.3);
-    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 140 + k * 260;
-    const g = c.createGain(), v = 0.12 + 1.1 * k * Math.sqrt(k);
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4 + k * 0.45);
-    o.connect(lp); lp.connect(g); g.connect(out); o.start(t); o.stop(t + 0.95);
-    // floorboards cracking under the weight
-    const n = this.noiseSrc(t, 0.4);
-    const nf = c.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 250 + k * 1100;
-    const ng = c.createGain();
-    ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.06 + 0.55 * k * Math.sqrt(k), t + 0.004); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.16 + k * 0.14);
-    n.connect(nf); nf.connect(ng); ng.connect(out);
-    // close by, the boards groan after it
-    if (k > 0.45 && Math.random() < 0.45) {
+    const f0 = thru ? 46 : 70 - near * 22;
+    o.frequency.setValueAtTime(f0 * 1.7, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.42, t + 0.3 + near * 0.3);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = Math.max(120, bright * 0.35);
+    const g = c.createGain(), v = 0.03 + 1.5 * near;
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45 + near * 0.45 + (thru ? 0.4 : 0));
+    o.connect(lp); lp.connect(g); g.connect(out); o.start(t); o.stop(t + 1.4);
+    // 2) the crack of weight landing on boards: only when it's close and on your floor
+    if (!thru) {
+      const n = this.noiseSrc(t, 0.4);
+      const nf = c.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = bright;
+      const ng = c.createGain();
+      ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.75 * Math.pow(near, 1.3), t + 0.004); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.12 + near * 0.16);
+      n.connect(nf); nf.connect(ng); ng.connect(out);
+    }
+    // 3) through a floor: the whole structure booms. Overhead it comes with creaking joists + a patter of dust;
+    //    underneath it's only a low, felt thump through your feet
+    if (thru) {
+      const b = c.createOscillator(); b.frequency.setValueAtTime(through === 'above' ? 58 : 38, t);
+      const bg = c.createGain(); bg.gain.setValueAtTime(0.0001, t); bg.gain.linearRampToValueAtTime(0.35 + 0.9 * near, t + 0.02); bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+      b.connect(bg); bg.connect(out); b.start(t); b.stop(t + 1);
+      if (through === 'above' && Math.random() < 0.3 + 0.6 * near) {
+        const cr = c.createOscillator(); cr.type = 'sawtooth';
+        const cf = 70 + Math.random() * 40; cr.frequency.setValueAtTime(cf, t + 0.05); cr.frequency.linearRampToValueAtTime(cf * 0.75, t + 0.7);
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 320 + Math.random() * 200; bp.Q.value = 6;
+        const cg = c.createGain(); cg.gain.setValueAtTime(0.0001, t + 0.05); cg.gain.linearRampToValueAtTime(0.09 * (0.4 + near), t + 0.2); cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+        cr.connect(bp); bp.connect(cg); cg.connect(out); cr.start(t + 0.05); cr.stop(t + 0.85);
+        const dust = this.noiseSrc(t + 0.12, 0.5), df = c.createBiquadFilter(); df.type = 'highpass'; df.frequency.value = 3500;
+        const dg = c.createGain(); dg.gain.setValueAtTime(0.0001, t + 0.12); dg.gain.linearRampToValueAtTime(0.025 * (0.3 + near), t + 0.2); dg.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+        dust.connect(df); df.connect(dg); dg.connect(this.master);                                   // falls all around you
+      }
+    } else if (near > 0.35 && Math.random() < 0.45) {
+      // close by on your floor, the boards groan after it
       const cr = c.createOscillator(); cr.type = 'sawtooth';
       const cf = 90 + Math.random() * 50; cr.frequency.setValueAtTime(cf, t + 0.08); cr.frequency.linearRampToValueAtTime(cf * 0.7, t + 0.6);
       const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 500 + Math.random() * 300; bp.Q.value = 7;
-      const cg = c.createGain(); cg.gain.setValueAtTime(0.0001, t + 0.08); cg.gain.linearRampToValueAtTime(0.05 * k, t + 0.2); cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      const cg = c.createGain(); cg.gain.setValueAtTime(0.0001, t + 0.08); cg.gain.linearRampToValueAtTime(0.07 * near, t + 0.2); cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
       cr.connect(bp); bp.connect(cg); cg.connect(out); cr.start(t + 0.08); cr.stop(t + 0.75);
     }
   },

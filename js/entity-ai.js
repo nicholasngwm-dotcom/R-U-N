@@ -60,6 +60,7 @@ const EntityAI = (function () {
     windup: 0.55,         // rears back before the hit (s)
     stagger: 1.2,         // recovery after knocking it over (s)
     smashGiveUp: 15,      // can't get to the locker in this long -> gives up
+    spawnDelay: 20,       // seconds into the game before it comes in through the garage
   };
 
   function create({ world, scene, player, game }) {
@@ -281,7 +282,7 @@ const EntityAI = (function () {
     scene.add(ent.root);
     const sp = L.entitySpawn || { c: 17.5, r: 20, f: 1 };
     const st = {
-      x: cx(sp.c), z: cz(sp.r), f: sp.f, y: 0, yaw: 0, speed: 0, crawl: 0, lunge: 0,
+      x: cx(sp.c), z: cz(sp.r), f: sp.f, y: 0, yaw: sp.yaw || 0, dormant: T.spawnDelay, speed: 0, crawl: 0, lunge: 0,
       state: 'roam', path: null, wp: 0, wait: 2, repathT: 0, lastSeen: null, lostT: 0, seenT: 99, timer: 0,
       sees: false, locker: null, lastScreech: -99, clock: 0,
     };
@@ -414,6 +415,15 @@ const EntityAI = (function () {
     }
 
     function update(dt) {
+      // not here yet: nothing hears, nothing sees, nothing moves. Then it comes in through the garage.
+      if (st.dormant > 0) {
+        st.dormant -= dt;
+        game.events.length = 0;
+        if (st.dormant > 0) return;
+        ent.root.visible = true;
+        updateCollider();
+        events.push({ type: 'spawn', x: st.x, y: st.y, z: st.z });
+      }
       const p = player.pos, hidden = game.hidden;
       const dx = p.x - st.x, dz = p.z - st.z, dist = Math.hypot(dx, dz);
 
@@ -593,7 +603,8 @@ const EntityAI = (function () {
     // pose it once so it's standing there before the game starts
     ent.root.position.set(st.x, st.y, st.z); ent.root.rotation.y = st.yaw;
     ent.animate(0, { speed: 0, crawl: 0, groundAt, fixFoot });
-    updateCollider();
+    if (st.dormant > 0) ent.root.visible = false;        // hidden (and out of the way) until it arrives
+    else updateCollider();
 
     return {
       update, noise, events, startJumpscare, updateJumpscare,
@@ -602,6 +613,7 @@ const EntityAI = (function () {
       toggleProx() { aura.visible = !aura.visible; updateAura(0); return aura.visible; },
       get state() { return st.state; },
       // chasing you (or about to hit you): for the heartbeat
+      get arrived() { return st.dormant <= 0; },
       get hunting() { return ['chase', 'attack', 'recover', 'smash', 'windup', 'stagger'].includes(st.state); },
       get sees() { return st.sees; },
       get crawl() { return st.crawl; },

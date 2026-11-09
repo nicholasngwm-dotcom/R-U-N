@@ -243,11 +243,19 @@
     for (const ev of entity.events) {
       const d = distTo(ev.x, ev.z, ev.y);
       if (ev.type === 'step') {
-        const k = Math.max(0, 1 - d / 40);                                       // heard up to ~40 m away
-        Sfx.entityStep(k, panOf(ev.x, ev.z), ev.crawl);
-        camShake = Math.max(camShake, k * k * k * 0.7);                          // the floor shakes when it's close
+        // how close: falls off steeply, so 3 m / 10 m / 25 m sound clearly different (and silent past ~45 m)
+        const flat = Math.hypot(ev.x - player.pos.x, ev.z - player.pos.z), dy = (ev.y || 0) - player.pos.y;
+        const through = Math.abs(dy) > 2.6 ? (dy > 0 ? 'above' : 'below') : null;   // a floor between you
+        const dd = Math.hypot(flat, dy);
+        const near = dd > 45 ? 0 : Math.exp(-dd / 8) * (1 - dd / 45 * 0.3);
+        // direction around your head: right, up, back (the listener faces -z)
+        const ex = ev.x - player.pos.x, ez = ev.z - player.pos.z, cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
+        const rel = { x: ex * cy - ez * sy, y: dy, z: ex * sy + ez * cy };
+        Sfx.entityStep({ near, rel, through, crawl: ev.crawl });
+        camShake = Math.max(camShake, near * near * near * (through ? 0.35 : 0.8));   // the floor shakes when it's close
       } else if (ev.type === 'screech') Sfx.screech(panOf(ev.x, ev.z), 0.4 + 0.35 * Math.max(0, 1 - d / 20));
       else if (ev.type === 'swipe') Sfx.swipe(panOf(ev.x, ev.z));
+      else if (ev.type === 'spawn') Sfx.garageDoor(Math.max(0.15, 1 - d / 45));          // heard through the whole house, louder nearer the cellar
     }
     entity.events.length = 0;
     // heartbeat while it's hunting you: faster (and louder) the closer it is
@@ -410,7 +418,7 @@
     g.beginPath(); g.arc(px, pz, 3, 0, Math.PI * 2); g.fill();
     g.strokeStyle = '#ff3b2f'; g.lineWidth = 2;
     g.beginPath(); g.moveTo(px, pz); g.lineTo(px - Math.sin(player.yaw) * 10, pz - Math.cos(player.yaw) * 10); g.stroke();
-    if (entity) {
+    if (entity && entity.arrived) {
       const p = entity.pos, ex = (p.x / Lay.CELL + Lay.W / 2) * MAP_PX, ez = (p.z / Lay.CELL + Lay.H / 2) * MAP_PX;
       g.fillStyle = g.strokeStyle = entity.state === 'chase' ? '#ff00ff' : '#e8e8e8';
       g.globalAlpha = entity.floor === pf ? 1 : 0.35;                // faded = on the other floor
@@ -655,7 +663,7 @@
         `health   ${Game.hp}\n` +
         `pos      ${player.pos.x.toFixed(1)}, ${player.pos.y.toFixed(2)}, ${player.pos.z.toFixed(1)}\n` +
         (World.storey ? `floor    ${FLOOR_NAMES[playerFloor()].toLowerCase()}\n` : '') +
-        (entity ? `entity   ${monsterFrozen ? 'FROZEN  ' : ''}${entity.state} (${FLOOR_NAMES[entity.floor].toLowerCase()})${entity.crawl > 0.05 ? `  crawl ${(entity.crawl * 100).toFixed(0)}%` : ''}\n` : '') +
+        (entity ? `entity   ${monsterFrozen ? 'FROZEN  ' : ''}${entity.arrived ? '' : 'not here yet  '}${entity.state} (${FLOOR_NAMES[entity.floor].toLowerCase()})${entity.crawl > 0.05 ? `  crawl ${(entity.crawl * 100).toFixed(0)}%` : ''}\n` : '') +
         `fps      ${fps.toFixed(0)}`;
     }
   }

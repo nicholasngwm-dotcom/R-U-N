@@ -229,7 +229,7 @@ const HouseLayout = (function () {
   ].map(([type, c, r, f, yaw = 0]) => ({ type, c, r, f, yaw }));
 
   const spawn = { c: 17.5, r: 41, f: 0, yaw: 0 };        // in the foyer, facing up the hall
-  const entitySpawn = { c: 17.5, r: 20, f: 1 };          // upstairs, at the far end of the hall
+  const entitySpawn = { c: 3.5, r: 20.5, f: 2, yaw: Math.PI / 2 };   // the garage, just inside the rusted door
 
   return {
     W, H, CELL, STOREY, BASEMENT,
