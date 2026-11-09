@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>R U N</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+  <div id="grain"></div>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="prompt"></div>
+    <div id="stamina"><div id="stamina-fill"></div></div>
+    <pre id="debug"></pre>
+    <canvas id="minimap"></canvas>
+    <div id="interact"><span id="interact-text"></span><div id="interact-bar"><div id="interact-fill"></div></div></div>
+    <div id="toast"></div>
+    <div id="noisemeter">
+      <svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/><path class="nm-wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      <div class="nm-bar"></div>
+      <span class="nm-text">QUIET</span>
+    </div>
+    <div id="inventory">
+      <div class="inv-row" id="inv-keys"><svg viewBox="0 0 48 24" width="36" height="18"><circle cx="9" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M15 12h28M36 12v6M41 12v5" stroke="currentColor" stroke-width="3" fill="none"/></svg><span></span></div>
+      <div class="inv-row" id="inv-parts"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 4h6v6H4zM10 7h8v13" stroke="currentColor" stroke-width="2.6" fill="none"/><path d="M14 20h8" stroke="currentColor" stroke-width="3.4"/></svg><span></span></div>
+      <div class="inv-row" id="inv-code"><svg viewBox="0 0 24 24" width="18" height="18"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M7 12h2M11 12h2M15 12h2" stroke="currentColor" stroke-width="2.4"/></svg><span></span></div>
+    </div>
+    <div id="keypad">
+      <div class="kp-title">COMBINATION LOCK</div>
+      <div class="kp-digits"><span></span><span></span><span></span><span></span></div>
+      <div class="kp-hint">type the numbers &nbsp;·&nbsp; <kbd>Backspace</kbd> undo &nbsp;·&nbsp; <kbd class="bind-interact">E</kbd> step away</div>
+      <div class="kp-known"></div>
+    </div>
+  </div>
+  <div id="hideshade"></div>
+  <div id="hurt"></div>
+  <div id="dead" class="hidden">
+    <div class="panel">
+      <h1>YOU DIED</h1>
+      <p class="sub">it found you</p>
+      <button id="retry">TRY AGAIN</button>
+    </div>
+  </div>
+  <div id="note"><div class="paper"><p id="note-text"></p><span class="close">[E] close</span></div></div>
+
+  <div id="win" class="hidden">
+    <div class="panel">
+      <h1>ESCAPED</h1>
+      <p class="sub">you made it out of the house</p>
+      <p id="win-stats"></p>
+      <button id="again">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <div id="menu">
+    <!-- main screen -->
+    <div class="screen" id="screen-main">
+      <div class="title-block">
+        <h1 class="title">R U N</h1>
+        <p class="tagline">the house is quiet. that is how it listens.</p>
+      </div>
+      <nav class="main-buttons">
+        <button id="start" class="menu-btn">START</button>
+        <button id="btn-settings" class="menu-btn">SETTINGS</button>
+        <button id="btn-quit" class="menu-btn">QUIT</button>
+      </nav>
+      <p class="menu-foot">headphones recommended</p>
+    </div>
+
+    <!-- settings screen -->
+    <div class="screen hidden" id="screen-settings">
+      <div class="panel">
+      <h2>SETTINGS</h2>
+
+      <label class="map-pick">Map
+        <select id="map">
+          <option value="house">The House</option>
+          <option value="warehouse">Movement test</option>
+        </select>
+      </label>
+
+      <div class="settings">
+        <label>Mouse sensitivity <span id="sens-val"></span>
+          <input id="sens" type="range" min="0.5" max="10" step="0.1" value="3">
+        </label>
+        <label>Field of view <span id="fov-val"></span>
+          <input id="fov" type="range" min="60" max="105" step="1" value="78">
+        </label>
+        <label class="check"><input id="fs" type="checkbox" checked> Fullscreen + keyboard lock (stops Ctrl+W closing the tab)</label>
+      </div>
+
+      <h3>SOUND</h3>
+      <div class="settings">
+        <label>Overall volume <span id="vol-master-val"></span>
+          <input id="vol-master" type="range" min="0" max="100" step="1">
+        </label>
+        <label>Sound effects <span id="vol-sfx-val"></span>
+          <input id="vol-sfx" type="range" min="0" max="100" step="1">
+        </label>
+        <label>Music <span id="vol-music-val"></span>
+          <input id="vol-music" type="range" min="0" max="100" step="1">
+        </label>
+        <label>Ambience <span id="vol-ambience-val"></span>
+          <input id="vol-ambience" type="range" min="0" max="100" step="1">
+        </label>
+      </div>
+
+      <h3>KEYBINDS <span class="bind-help">click a key, then press the new one · Del clears · Esc cancels</span></h3>
+      <div class="binds" id="binds"></div>
+      <button id="binds-reset" class="link-btn">reset keys to default</button>
+
+      <h3>OTHER CONTROLS</h3>
+      <div class="controls">
+        <div><kbd>Mouse</kbd><span>look</span></div>
+        <div><kbd>Sprint + Crouch</kbd><span>slide</span></div>
+        <div><kbd>Slide + Jump</kbd><span>slide-jump (keeps momentum)</span></div>
+        <div><kbd>Jump</kbd> at a ledge<span>vault over / climb on top</span></div>
+        <div><kbd>Forward</kbd> into a ladder<span>climb (back = down, crouch = slide down, jump = let go)</span></div>
+        <div>hold <kbd>Interact</kbd><span>search drawers · pick up a chair / vase, swing the mouse, let go to throw</span></div>
+        <div><kbd>0-9</kbd> at the door lock<span>type the code</span></div>
+        <div><kbd>0</kbd> / <kbd>1</kbd><span>mode 0: normal game · mode 1: monster frozen</span></div>
+        <div>type <kbd>key</kbd><span>test: light up everything you still need</span></div>
+        <div>type <kbd>prox</kbd><span>test: show the entity's sight radius</span></div>
+        <div><kbd>Esc</kbd><span>pause</span></div>
+      </div>
+
+      <button id="btn-back" class="menu-btn small">BACK</button>
+      </div>
+    </div>
+
+    <!-- shown if the browser won't let the page close itself -->
+    <div class="screen hidden" id="screen-quit">
+      <div class="title-block">
+        <h1 class="title small">R U N</h1>
+        <p class="tagline">you can close this tab now.</p>
+      </div>
+      <nav class="main-buttons">
+        <button id="btn-unquit" class="menu-btn">BACK TO MENU</button>
+      </nav>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/maps/house-layout.js"></script>
+  <script src="js/maps/house.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/arms.js"></script>
+  <script src="js/ledgehint.js"></script>
+  <script src="js/healthbar.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/props.js"></script>
+  <script src="js/entity.js"></script>
+  <script src="js/entity-ai.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

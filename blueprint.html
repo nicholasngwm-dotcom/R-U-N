@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>House Blueprint</title>
+  <style>
+    html, body { margin: 0; background: #08223d; }
+    body { display: flex; flex-direction: column; align-items: center; font-family: "Courier New", monospace; color: #cfe8ff; }
+    canvas { display: block; max-width: 100%; height: auto; }
+    .bar { padding: 10px 16px 18px; display: flex; gap: 12px; align-items: center; font-size: 13px; }
+    button { font: inherit; background: #123d66; color: #e8f4ff; border: 1px solid #6fb7ff; padding: 6px 14px; cursor: pointer; }
+    button:hover { background: #1a4f80; }
+    body.export .bar { display: none; }
+    @media print { .bar { display: none; } body { background: #fff; } }
+  </style>
+</head>
+<body>
+  <canvas id="bp"></canvas>
+  <div class="bar">
+    <button id="dl">Download PNG</button>
+    <span>Drawn live from js/maps/house-layout.js — edit the map and refresh.</span>
+  </div>
+
+  <script src="js/maps/house-layout.js"></script>
+  <script>
+  (function () {
+    if (location.search.includes('export')) document.body.classList.add('export');
+    const L = HouseLayout, { W, H, CELL } = L;
+    const get = (c, r) => (c < 0 || r < 0 || c >= W || r >= H) ? '#' : L.grid[r][c];
+    const isWallish = ch => '#VHU'.includes(ch);
+    const openFloor = ch => !isWallish(ch) && ch !== 'D';
+
+    // ---------- page geometry ----------
+    const S = 18;                    // pixels per 1.5 m cell
+    const PAD = 40, TOP = 92, LEG = 340;
+    const MW = W * S, MH = H * S;
+    const cv = document.getElementById('bp');
+    cv.width = PAD + MW + 34 + LEG;
+    cv.height = TOP + MH + 56;
+    const g = cv.getContext('2d');
+    const X = c => PAD + c * S, Y = r => TOP + r * S;
+
+    // ---------- palette ----------
+    const BG = '#0b3a66', INK = '#eaf5ff', SOFT = '#9cc9f5', FAINT = 'rgba(156,201,245,0.13)';
+    const VENT = '#6fe3ff', HOLE = '#ffd166', DROP = '#ff9f43', CLIMB = '#8ce99a', START = '#ff6b6b';
+    const FONT = '"Courier New", monospace';
+
+    function hatch(color, step = 7, w = 1.2, cross = false) {
+      const p = document.createElement('canvas'); p.width = p.height = step;
+      const q = p.getContext('2d');
+      q.strokeStyle = color; q.lineWidth = w;
+      q.beginPath(); q.moveTo(0, step); q.lineTo(step, 0); q.moveTo(-1, 1); q.lineTo(1, -1); q.moveTo(step - 1, step + 1); q.lineTo(step + 1, step - 1);
+      if (cross) { q.moveTo(0, 0); q.lineTo(step, step); }
+      q.stroke();
+      return g.createPattern(p, 'repeat');
+    }
+    const WALL_HATCH = hatch('rgba(156,201,245,0.55)', 6, 1.1);
+    const GALLERY_HATCH = hatch('rgba(234,245,255,0.22)', 9, 1, true);
+
+    // ---------- helpers ----------
+    function line(x0, y0, x1, y1, color = INK, w = 2, dash = null) {
+      g.save(); g.strokeStyle = color; g.lineWidth = w; if (dash) g.setLineDash(dash);
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); g.restore();
+    }
+    function text(str, x, y, size = 12, color = INK, align = 'center', bold = true, rot = 0) {
+      g.save(); g.translate(x, y); g.rotate(rot);
+      g.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`; g.fillStyle = color; g.textAlign = align; g.textBaseline = 'middle';
+      g.fillText(str, 0, 0); g.restore();
+    }
+    function label(str, sub, x, y, rot = 0, size = 13) {
+      g.save(); g.translate(x, y); g.rotate(rot);
+      g.font = `bold ${size}px ${FONT}`;
+      const w = Math.max(g.measureText(str).width, sub ? g.measureText(sub).width * 0.8 : 0) + 14;
+      const h = sub ? size * 2.5 : size * 1.6;
+      g.fillStyle = 'rgba(11,58,102,0.88)'; g.fillRect(-w / 2, -h / 2, w, h);
+      g.strokeStyle = 'rgba(156,201,245,0.5)'; g.lineWidth = 1; g.strokeRect(-w / 2 + 0.5, -h / 2 + 0.5, w - 1, h - 1);
+      g.restore();
+      text(str, x - (sub ? Math.sin(rot) * -size * 0.55 : 0), y - (sub ? Math.cos(rot) * size * 0.55 : 0), size, INK, 'center', true, rot);
+      if (sub) text(sub, x + Math.sin(rot) * -size * 0.6 * -1, y + Math.cos(rot) * size * 0.65, size * 0.78, SOFT, 'center', false, rot);
+    }
+    function arrow(x0, y0, x1, y1, color, w = 2) {
+      line(x0, y0, x1, y1, color, w);
+      const a = Math.atan2(y1 - y0, x1 - x0), hl = 7;
+      g.save(); g.fillStyle = color; g.beginPath();
+      g.moveTo(x1, y1); g.lineTo(x1 - Math.cos(a - 0.45) * hl, y1 - Math.sin(a - 0.45) * hl);
+      g.lineTo(x1 - Math.cos(a + 0.45) * hl, y1 - Math.sin(a + 0.45) * hl); g.closePath(); g.fill(); g.restore();
+    }
+    function passAxis(c, r) {
+      const xOK = openFloor(get(c - 1, r)) && openFloor(get(c + 1, r));
+      const zOK = openFloor(get(c, r - 1)) && openFloor(get(c, r + 1));
+      if (zOK && !xOK) return 'z';
+      if (xOK && !zOK) return 'x';
+      return get(c - 1, r) === '#' ? 'z' : 'x';
+    }
+    function mergeRects(pred) {
+      const used = L.grid.map(() => new Array(W).fill(false)), out = [];
+      for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+        if (used[r][c] || !pred(get(c, r))) continue;
+        let c1 = c; while (c1 + 1 < W && !used[r][c1 + 1] && pred(get(c1 + 1, r))) c1++;
+        let r1 = r;
+        outer: while (r1 + 1 < H) { for (let k = c; k <= c1; k++) if (used[r1 + 1][k] || !pred(get(k, r1 + 1))) break outer; r1++; }
+        for (let rr = r; rr <= r1; rr++) for (let k = c; k <= c1; k++) used[rr][k] = true;
+        out.push({ c0: c, r0: r, c1, r1 });
+      }
+      return out;
+    }
+    // outline of a group of cells (only edges that border non-members)
+    function outline(pred, color, w = 1.5, dash = null) {
+      for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+        if (!pred(get(c, r))) continue;
+        if (!pred(get(c, r - 1))) line(X(c), Y(r), X(c + 1), Y(r), color, w, dash);
+        if (!pred(get(c, r + 1))) line(X(c), Y(r + 1), X(c + 1), Y(r + 1), color, w, dash);
+        if (!pred(get(c - 1, r))) line(X(c), Y(r), X(c), Y(r + 1), color, w, dash);
+        if (!pred(get(c + 1, r))) line(X(c + 1), Y(r), X(c + 1), Y(r + 1), color, w, dash);
+      }
+    }
+
+    // ---------- symbols (shared by the plan and the legend) ----------
+    const SYM = {
+      shelf(x, y, w, h) {
+        g.strokeStyle = INK; g.lineWidth = 1.5; g.strokeRect(x + 3, y + 3, w - 6, h - 6);
+        if (h > w) for (const f of [0.38, 0.62]) line(x + w * f, y + 5, x + w * f, y + h - 5, SOFT, 1);
+        else for (const f of [0.38, 0.62]) line(x + 5, y + h * f, x + w - 5, y + h * f, SOFT, 1);
+      },
+      table(x, y, w, h) { g.strokeStyle = INK; g.lineWidth = 1.5; g.strokeRect(x + 3, y + 3, w - 6, h - 6); },
+      dresser(x, y, w, h) { SYM.table(x, y, w, h); line(x + 3, y + h / 2, x + w - 3, y + h / 2, SOFT, 1); },
+      piano(x, y, w, h) {
+        g.save(); g.strokeStyle = INK; g.lineWidth = 1.5; g.beginPath();
+        g.moveTo(x + 4, y + 4); g.lineTo(x + w - 4, y + 4); g.lineTo(x + w - 4, y + h * 0.55);
+        g.quadraticCurveTo(x + w - 4, y + h - 4, x + w * 0.45, y + h - 4); g.lineTo(x + 4, y + h - 4); g.closePath(); g.stroke(); g.restore();
+        for (let k = 1; k < 6; k++) line(x + 4 + k * (w - 8) / 6, y + 4, x + 4 + k * (w - 8) / 6, y + 10, SOFT, 1);
+      },
+      wardrobe(x, y, w, h) { SYM.table(x, y, w, h); line(x + 3, y + 3, x + w - 3, y + h - 3, SOFT, 1); line(x + w - 3, y + 3, x + 3, y + h - 3, SOFT, 1); },
+      planter(x, y, w, h) { SYM.table(x, y, w, h); g.beginPath(); g.arc(x + w / 2, y + h / 2, w * 0.26, 0, 7); g.strokeStyle = CLIMB; g.lineWidth = 1.2; g.stroke(); },
+      sideTable(x, y, w, h) { g.save(); g.setLineDash([3, 3]); g.strokeStyle = INK; g.lineWidth = 1.3; g.strokeRect(x + 3, y + 3, w - 6, h - 6); g.restore(); },
+      pillar(x, y, w, h) { g.beginPath(); g.arc(x + w / 2, y + h / 2, w * 0.3, 0, 7); g.fillStyle = INK; g.fill(); },
+      clock(x, y, w, h) { g.strokeStyle = INK; g.lineWidth = 1.5; g.strokeRect(x + 5, y + 5, w - 10, h - 10); g.beginPath(); g.arc(x + w / 2, y + h / 2, 2.5, 0, 7); g.fillStyle = INK; g.fill(); },
+      drawer(x, y, w, h) {                     // searchable: filled cream so it pops
+        g.fillStyle = '#e8d9a8'; g.fillRect(x + 4, y + 4, w - 8, h - 8);
+        g.strokeStyle = '#7a5a20'; g.lineWidth = 1;
+        for (const f of [0.38, 0.62]) line(x + 6, y + h * f, x + w - 6, y + h * f, '#7a5a20', 1);
+      },
+      locker(x, y, w, h) {
+        g.strokeStyle = VENT; g.lineWidth = 1.5; g.strokeRect(x + 4, y + 2, w - 8, h - 4);
+        for (let k = 0; k < 3; k++) line(x + 7, y + 5 + k * 3, x + w - 7, y + 5 + k * 3, VENT, 1);
+      },
+      padlock(x, y) {
+        g.save(); g.fillStyle = HOLE; g.fillRect(x - 5, y - 2, 10, 8);
+        g.strokeStyle = HOLE; g.lineWidth = 2; g.beginPath(); g.arc(x, y - 2, 3.5, Math.PI, 0); g.stroke(); g.restore();
+      },
+      light(x, y) {
+        g.save(); g.strokeStyle = HOLE; g.lineWidth = 1; g.globalAlpha = 0.85;
+        g.beginPath(); g.arc(x, y, 4, 0, 7); g.stroke();
+        for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; line(x + Math.cos(a) * 6, y + Math.sin(a) * 6, x + Math.cos(a) * 9, y + Math.sin(a) * 9, HOLE, 1); }
+        g.restore();
+      },
+      ladder(x, y, w, h, vertical) {           // rails along the climb direction
+        if (vertical) { line(x + w * 0.3, y + 2, x + w * 0.3, y + h - 2, CLIMB, 1.6); line(x + w * 0.7, y + 2, x + w * 0.7, y + h - 2, CLIMB, 1.6); for (let k = 1; k < 5; k++) line(x + w * 0.3, y + k * h / 5, x + w * 0.7, y + k * h / 5, CLIMB, 1.2); }
+        else { line(x + 2, y + h * 0.3, x + w - 2, y + h * 0.3, CLIMB, 1.6); line(x + 2, y + h * 0.7, x + w - 2, y + h * 0.7, CLIMB, 1.6); for (let k = 1; k < 5; k++) line(x + k * w / 5, y + h * 0.3, x + k * w / 5, y + h * 0.7, CLIMB, 1.2); }
+      },
+      vines(x, y, w, h) {
+        g.save(); g.strokeStyle = CLIMB; g.lineWidth = 1.5;
+        for (const f of [0.3, 0.55, 0.8]) { g.beginPath(); for (let t = 0; t <= 1; t += 0.1) { const px = x + w * f + Math.sin(t * 9) * 2.5, py = y + 2 + t * (h - 4); t ? g.lineTo(px, py) : g.moveTo(px, py); } g.stroke(); }
+        g.restore();
+      },
+      vent(x, y, w, h, axis) {                  // opening across the wall, grille lines across the crawl direction
+        const ow = 1.35 / CELL;
+        g.save();
+        if (axis === 'x') { const oy = y + h * (1 - ow) / 2; g.fillStyle = BG; g.fillRect(x, oy, w, h * ow); g.strokeStyle = VENT; g.lineWidth = 1.6; g.strokeRect(x + 0.5, oy, w - 1, h * ow); for (let k = 1; k < 4; k++) line(x + k * w / 4, oy + 1, x + k * w / 4, oy + h * ow - 1, VENT, 1); }
+        else { const ox = x + w * (1 - ow) / 2; g.fillStyle = BG; g.fillRect(ox, y, w * ow, h); g.strokeStyle = VENT; g.lineWidth = 1.6; g.strokeRect(ox, y + 0.5, w * ow, h - 1); for (let k = 1; k < 4; k++) line(ox + 1, y + k * h / 4, ox + w * ow - 1, y + k * h / 4, VENT, 1); }
+        g.restore();
+      },
+      hole(x, y, w, h, axis, color = HOLE, dashed = false) {   // jagged broken edges
+        const ow = 1.4 / CELL;
+        g.save(); g.fillStyle = BG; g.strokeStyle = color; g.lineWidth = 1.6; if (dashed) g.setLineDash([4, 3]);
+        const zig = (ax, ay, bx, by, n = 6) => { g.moveTo(ax, ay); for (let k = 1; k <= n; k++) { const t = k / n, j = (k % 2 ? 2.5 : -2.5); g.lineTo(ax + (bx - ax) * t + (ay === by ? 0 : j), ay + (by - ay) * t + (ay === by ? j : 0)); } };
+        if (axis === 'x') { const oy = y + h * (1 - ow) / 2, oh = h * ow; g.fillRect(x, oy, w, oh); g.beginPath(); zig(x, oy, x + w, oy); zig(x, oy + oh, x + w, oy + oh); g.stroke(); }
+        else { const ox = x + w * (1 - ow) / 2, owp = w * ow; g.fillRect(ox, y, owp, h); g.beginPath(); zig(ox, y, ox, y + h); zig(ox + owp, y, ox + owp, y + h); g.stroke(); }
+        g.restore();
+      },
+    };
+
+    // =====================================================================
+    // draw
+    // =====================================================================
+    g.fillStyle = BG; g.fillRect(0, 0, cv.width, cv.height);
+    for (let x = 0; x < cv.width; x += S / 2) line(x, 0, x, cv.height, FAINT, x % S === 0 ? 1 : 0.5);
+    for (let y = 0; y < cv.height; y += S / 2) line(0, y, cv.width, y, FAINT, y % S === 0 ? 1 : 0.5);
+
+    // walls: hatched, with a crisp outline wherever they meet open space
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      if (isWallish(get(c, r))) { g.fillStyle = BG; g.fillRect(X(c), Y(r), S, S); g.fillStyle = WALL_HATCH; g.fillRect(X(c), Y(r), S, S); }
+    }
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      if (!isWallish(get(c, r))) continue;
+      for (const [dc, dr] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+        const nb = get(c + dc, r + dr);
+        const inside = c + dc >= 0 && r + dr >= 0 && c + dc < W && r + dr < H;
+        if (!inside || isWallish(nb)) continue;
+        if (dr === -1) line(X(c), Y(r), X(c + 1), Y(r));
+        if (dr === 1) line(X(c), Y(r + 1), X(c + 1), Y(r + 1));
+        if (dc === -1) line(X(c), Y(r), X(c), Y(r + 1));
+        if (dc === 1) line(X(c + 1), Y(r), X(c + 1), Y(r + 1));
+      }
+    }
+    g.strokeStyle = INK; g.lineWidth = 3; g.strokeRect(X(0), Y(0), MW, MH);
+
+    // galleries (upper level, 3.2 m): cross-hatch + dashed outline
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) if (get(c, r) === 'M') { g.fillStyle = GALLERY_HATCH; g.fillRect(X(c), Y(r), S, S); }
+    outline(ch => ch === 'M', INK, 1.5, [6, 4]);
+
+    // doorways / vents / holes
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      const ch = get(c, r);
+      if (!'DVHU'.includes(ch)) continue;
+      const ax = passAxis(c, r), x = X(c), y = Y(r);
+      if (ch === 'D') {
+        g.fillStyle = BG; g.fillRect(x, y, S, S);
+        if (ax === 'z') { line(x, y, x + S, y, SOFT, 1, [3, 3]); line(x, y + S, x + S, y + S, SOFT, 1, [3, 3]); }
+        else { line(x, y, x, y + S, SOFT, 1, [3, 3]); line(x + S, y, x + S, y + S, SOFT, 1, [3, 3]); }
+      } else if (ch === 'V') SYM.vent(x, y, S, S, ax);
+      else if (ch === 'H') SYM.hole(x, y, S, S, ax);
+      else {
+        SYM.hole(x, y, S, S, ax, DROP, true);
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (get(c + dc, r + dr) !== 'M') continue;      // arrow points away from the gallery: the drop
+          const cx = x + S / 2, cy = y + S / 2;
+          arrow(cx + dc * S * 0.3, cy + dr * S * 0.3, cx - dc * S * 1.2, cy - dr * S * 1.2, DROP, 2);
+        }
+      }
+    }
+
+    // grand staircase
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      if (!/[1-8]/.test(get(c, r))) continue;
+      g.fillStyle = 'rgba(234,245,255,0.08)'; g.fillRect(X(c), Y(r), S, S);
+      line(X(c), Y(r), X(c + 1), Y(r), SOFT, 1);
+    }
+    outline(ch => /[1-8]/.test(ch), INK, 1.5);
+    {
+      const st = mergeRects(ch => /[1-8]/.test(ch))[0];
+      if (st) {
+        const mx = (X(st.c0) + X(st.c1 + 1)) / 2;
+        arrow(mx, Y(st.r1 + 1) - 4, mx, Y(st.r0) + 4, INK, 2);
+        text('UP', mx + 16, Y(st.r1) + 2, 11, INK);
+      }
+    }
+
+    // furniture
+    for (const R of mergeRects(ch => ch === 'b')) SYM.shelf(X(R.c0), Y(R.r0), (R.c1 - R.c0 + 1) * S, (R.r1 - R.r0 + 1) * S);
+    for (const R of mergeRects(ch => ch === 'k')) SYM.table(X(R.c0), Y(R.r0), (R.c1 - R.c0 + 1) * S, (R.r1 - R.r0 + 1) * S);
+    for (const R of mergeRects(ch => ch === 'n')) SYM.piano(X(R.c0), Y(R.r0), (R.c1 - R.c0 + 1) * S, (R.r1 - R.r0 + 1) * S);
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      const ch = get(c, r), x = X(c), y = Y(r);
+      if (ch === 'd') SYM.dresser(x, y, S, S);
+      else if (ch === 'w') SYM.wardrobe(x, y, S, S);
+      else if (ch === 'q') SYM.planter(x, y, S, S);
+      else if (ch === 't') SYM.sideTable(x, y, S, S);
+      else if (ch === 'p') SYM.pillar(x, y, S, S);
+      else if (ch === 'g') SYM.clock(x, y, S, S);
+      else if (ch === 'S') SYM.drawer(x, y, S, S);
+      else if (ch === 'X') SYM.locker(x, y, S, S);
+      else if (ch === 'L' || ch === 'v') {
+        let vertical = true;
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (get(c + dc, r + dr) === 'M') vertical = dr !== 0;
+        if (ch === 'L') SYM.ladder(x, y, S, S, vertical); else SYM.vines(x, y, S, S);
+      }
+    }
+    for (const [c, r] of L.lights) SYM.light(X(c) + S / 2, Y(r) + S / 2);
+
+    // room + hall labels
+    const ROOM_NAMES = { library: 'LIBRARY', dining: 'DINING ROOM', ballroom: 'BALLROOM', kitchen: 'KITCHEN', foyer: 'FOYER', conservatory: 'CONSERVATORY' };
+    const LABEL_AT = { library: [13.5, 18.3], dining: [26.5, 10.2], ballroom: [45.5, 18.3], kitchen: [13, 36.5], foyer: [25.6, 35.3], conservatory: [45.5, 28.5] };
+    for (const z of L.zones) {
+      if (!ROOM_NAMES[z.name]) continue;
+      const [lc, lr] = LABEL_AT[z.name];
+      const wM = ((z.c1 - z.c0 + 1) * CELL).toFixed(0), hM = ((z.r1 - z.r0 + 1) * CELL).toFixed(0);
+      label(ROOM_NAMES[z.name], `${wM} x ${hM} m`, X(lc), Y(lr));
+    }
+    label('NORTH HALL', null, X(21), Y(2.5), 0, 12);
+    label('MIDDLE HALL', null, X(36.5), Y(22.4), 0, 12);
+    label('WEST HALL', null, X(2.5), Y(19.5) - 70, -Math.PI / 2, 12);
+    label('EAST HALL', null, X(56.5), Y(36) - 40, -Math.PI / 2, 12);
+    text("SERVANTS'", X(21.5), Y(31), 9, SOFT, 'center', true, -Math.PI / 2);
+    text("SERVANTS'", X(38.5), Y(31), 9, SOFT, 'center', true, -Math.PI / 2);
+    text('GALLERY  ▲3.2m', X(14), Y(6.9), 9, SOFT);
+    text('BALCONY  ▲3.2m', X(46), Y(6.9), 9, SOFT);
+    text('GALLERY ▲3.2m', X(32.5), Y(27.6), 9, SOFT);
+    text('WALKWAY ▲3.2m', X(52.5), Y(33), 9, SOFT, 'center', true, -Math.PI / 2);
+
+    // the front door: a gap in the outer wall, two leaves swinging outward, padlocked
+    {
+      const cols = []; for (let c = 0; c < W; c++) if (get(c, H - 1) === 'E') cols.push(c);
+      if (cols.length) {
+        const x0 = X(cols[0]), x1 = X(cols[cols.length - 1] + 1), yw = Y(H - 1), yo = Y(H) + 2;
+        g.fillStyle = BG; g.fillRect(x0, yw - 1, x1 - x0, S + 4);
+        const half = (x1 - x0) / 2;
+        g.save(); g.strokeStyle = INK; g.lineWidth = 1; g.setLineDash([3, 3]);
+        g.beginPath(); g.arc(x0, yo, half, 0, Math.PI / 2); g.stroke();
+        g.beginPath(); g.arc(x1, yo, half, Math.PI / 2, Math.PI); g.stroke();
+        g.restore();
+        line(x0, yo, x0, yo + half, INK, 2.5); line(x1, yo, x1, yo + half, INK, 2.5);
+        line(x0, yw + S / 2, x1, yw + S / 2, HOLE, 2);
+        SYM.padlock((x0 + x1) / 2, yw + S / 2 - 1);
+        text('FRONT DOOR — EXIT', x1 + 12, yo + 12, 10, HOLE, 'left');
+      }
+    }
+
+    // start
+    {
+      const sx = X(L.spawn.c) + S / 2, sy = Y(L.spawn.r) + S / 2;
+      g.beginPath(); g.arc(sx, sy, 6, 0, 7); g.fillStyle = START; g.fill();
+      arrow(sx, sy - 7, sx, sy - 20, START, 2);
+      text('START', sx + 28, sy, 11, START);
+    }
+
+    // title
+    text('R U N', PAD, 30, 26, '#ff8f7a', 'left');
+    text('THE HOUSE  —  FLOOR PLAN', PAD + 108, 31, 18, INK, 'left');
+    text(`ground floor + galleries   ·   ${(W * CELL).toFixed(0)} x ${(H * CELL).toFixed(0)} m   ·   ceilings 6 m   ·   1 square = 1.5 m`, PAD, 62, 12, SOFT, 'left', false);
+
+    // =====================================================================
+    // legend
+    // =====================================================================
+    const LX = PAD + MW + 34;
+    g.strokeStyle = 'rgba(156,201,245,0.6)'; g.lineWidth = 1; g.strokeRect(LX - 12, TOP, LEG - 12, MH);
+    text('LEGEND', LX, TOP + 18, 14, INK, 'left');
+    const rows = [
+      ['Wall', (x, y) => { g.fillStyle = WALL_HATCH; g.fillRect(x, y, S, S); g.strokeStyle = INK; g.lineWidth = 2; g.strokeRect(x, y, S, S); }],
+      ['Doorway', (x, y) => { line(x, y, x + S, y, SOFT, 1, [3, 3]); line(x, y + S, x + S, y + S, SOFT, 1, [3, 3]); }],
+      ['Vent  — crouch / slide through', (x, y) => { g.fillStyle = WALL_HATCH; g.fillRect(x, y, S, S); SYM.vent(x, y, S, S, 'z'); }],
+      ['Broken hole  — vault through', (x, y) => { g.fillStyle = WALL_HATCH; g.fillRect(x, y, S, S); SYM.hole(x, y, S, S, 'z'); }],
+      ['High hole  — drop from gallery', (x, y) => { g.fillStyle = WALL_HATCH; g.fillRect(x, y, S, S); SYM.hole(x, y, S, S, 'z', DROP, true); arrow(x + S / 2, y + S / 2, x + S + 12, y + S / 2, DROP, 2); }],
+      ['Gallery / balcony  (3.2 m up)', (x, y) => { g.fillStyle = GALLERY_HATCH; g.fillRect(x, y, S, S); g.save(); g.setLineDash([5, 3]); g.strokeStyle = INK; g.lineWidth = 1.5; g.strokeRect(x, y, S, S); g.restore(); }],
+      ['Grand staircase', (x, y) => { g.fillStyle = 'rgba(234,245,255,0.08)'; g.fillRect(x, y, S, S); for (let k = 0; k < 4; k++) line(x, y + k * S / 4, x + S, y + k * S / 4, SOFT, 1); g.strokeStyle = INK; g.lineWidth = 1.5; g.strokeRect(x, y, S, S); }],
+      ['Ladder  — up to gallery', (x, y) => SYM.ladder(x, y, S, S, true)],
+      ['Vines  — up to gallery', (x, y) => SYM.vines(x, y, S, S)],
+      ['Bookshelf  — climb up (2.1 m)', (x, y) => SYM.shelf(x, y, S, S)],
+      ['Table / counter  — vault (1.0 m)', (x, y) => SYM.table(x, y, S, S)],
+      ['Planter  — vault (1.0 m)', (x, y) => SYM.planter(x, y, S, S)],
+      ['Side table  — slide under', (x, y) => SYM.sideTable(x, y, S, S)],
+      ['Wardrobe  — blocks (2.7 m)', (x, y) => SYM.wardrobe(x, y, S, S)],
+      ['Grandfather clock', (x, y) => SYM.clock(x, y, S, S)],
+      ['Drawers  — search (one has the key)', (x, y) => SYM.drawer(x, y, S, S)],
+      ['Locker  — hide inside', (x, y) => SYM.locker(x, y, S, S)],
+      ['Front door  — padlocked exit', (x, y) => { line(x, y + S / 2, x + S, y + S / 2, HOLE, 2); SYM.padlock(x + S / 2, y + S / 2 - 1); }],
+      ['Pillar', (x, y) => SYM.pillar(x, y, S, S)],
+      ['Chandelier (light)', (x, y) => SYM.light(x + S / 2, y + S / 2)],
+      ['Start', (x, y) => { g.beginPath(); g.arc(x + S / 2, y + S / 2, 6, 0, 7); g.fillStyle = START; g.fill(); }],
+    ];
+    rows.forEach(([name, draw], i) => {
+      const y = TOP + 40 + i * 27;
+      draw(LX, y);
+      text(name, LX + S + 22, y + S / 2, 11.5, INK, 'left', false);
+    });
+
+    // north arrow + scale bar
+    const by = TOP + MH - 70;
+    arrow(LX + 14, by + 40, LX + 14, by + 4, INK, 2);
+    text('N', LX + 14, by - 8, 14, INK);
+    const tenM = 10 / CELL * S;
+    for (let k = 0; k < 2; k++) { g.fillStyle = k % 2 ? BG : INK; g.fillRect(LX + 50 + k * tenM / 2, by + 26, tenM / 2, 7); }
+    g.strokeStyle = INK; g.lineWidth = 1; g.strokeRect(LX + 50, by + 26, tenM, 7);
+    text('0', LX + 50, by + 44, 10, SOFT); text('5', LX + 50 + tenM / 2, by + 44, 10, SOFT); text('10 m', LX + 50 + tenM, by + 44, 10, SOFT);
+
+    text('Halls share one wallpaper (easy to get lost). Each room has its own look.', PAD, TOP + MH + 26, 11.5, SOFT, 'left', false);
+
+    document.getElementById('dl').onclick = () => {
+      const a = document.createElement('a');
+      a.download = 'house-blueprint.png';
+      a.href = cv.toDataURL('image/png');
+      a.click();
+    };
+  })();
+  </script>
+</body>
+</html>

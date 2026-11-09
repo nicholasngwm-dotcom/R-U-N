@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" width="1200" height="640">
+  <title>R U N</title>
+  <defs>
+    <!-- rough, chewed edges on everything -->
+    <filter id="rough" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="7" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <!-- grain over the pale face -->
+    <filter id="stipple" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" result="g"/>
+      <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.07  0 0 0 -2.2 1.35" result="dots"/>
+      <feComposite in="dots" in2="SourceGraphic" operator="in" result="d2"/>
+      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="d2"/></feMerge>
+    </filter>
+    <radialGradient id="glow" cx="50%" cy="48%" r="55%">
+      <stop offset="0" stop-color="#2a0c0c"/>
+      <stop offset="0.55" stop-color="#110505"/>
+      <stop offset="1" stop-color="#050404"/>
+    </radialGradient>
+    <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e9e3d2"/>
+      <stop offset="1" stop-color="#9c958a"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ece6d6"/>
+      <stop offset="1" stop-color="#b9b1a2"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="640" fill="url(#glow)"/>
+
+  <!-- R -->
+  <g filter="url(#rough)">
+    <text x="300" y="470" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="700"
+          font-size="300" fill="url(#bone)" transform="translate(300 470) scale(0.78 1.55) translate(-300 -470)">R</text>
+  </g>
+
+  <!-- U: the thing itself. A black hood, a long pale face, and the mouth hanging open -->
+  <g filter="url(#rough)">
+    <!-- the letter: a bone-white U, its bowl filled with the dark of the hood -->
+    <path d="M440 138 L 512 138 L 512 330 C 512 440 548 462 600 462 C 652 462 688 440 688 330 L 688 138 L 760 138 L 760 330 C 760 482 694 528 600 528 C 506 528 440 482 440 330 Z" fill="url(#bone)"/>
+    <path d="M512 138 L 688 138 L 688 330 C 688 440 652 462 600 462 C 548 462 512 440 512 330 Z" fill="#070606"/>
+    <g filter="url(#stipple)">
+      <path d="M600 150 C 552 150 530 196 530 270 C 530 360 552 440 600 452 C 648 440 670 360 670 270 C 670 196 648 150 600 150 Z" fill="url(#face)"/>
+    </g>
+    <!-- eyes: two dark hollows -->
+    <ellipse cx="572" cy="246" rx="13" ry="8" fill="#141010" transform="rotate(-8 572 246)"/>
+    <ellipse cx="628" cy="246" rx="13" ry="8" fill="#141010" transform="rotate(8 628 246)"/>
+    <!-- the mouth: a huge, long black hole -->
+    <path d="M600 284 C 574 284 564 316 566 360 C 568 404 582 434 600 436 C 618 434 632 404 634 360 C 636 316 626 284 600 284 Z" fill="#040303"/>
+    <path d="M600 290 C 584 290 577 310 577 336" stroke="#3a1010" stroke-width="3" fill="none" opacity="0.7"/>
+  </g>
+
+  <!-- N -->
+  <g filter="url(#rough)">
+    <text x="900" y="470" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="700"
+          font-size="300" fill="url(#bone)" transform="translate(900 470) scale(0.78 1.55) translate(-900 -470)">N</text>
+  </g>
+
+  <!-- blood running off the letters -->
+  <g fill="#8a0f12" filter="url(#rough)">
+    <path d="M262 500 q 6 0 7 14 l 2 60 q -1 12 -9 12 q -8 0 -8 -12 l 2 -60 q 1 -14 6 -14 z"/>
+    <path d="M336 498 q 4 0 5 10 l 1 30 q 0 8 -6 8 q -6 0 -6 -8 l 1 -30 q 1 -10 5 -10 z"/>
+    <path d="M598 524 q 5 0 6 12 l 2 70 q -1 12 -8 12 q -7 0 -7 -12 l 1 -70 q 1 -12 6 -12 z"/>
+    <path d="M598 440 q 4 0 4 8 l 1 16 q 0 5 -5 5 q -5 0 -5 -5 l 1 -16 q 0 -8 4 -8 z"/>
+    <path d="M872 498 q 5 0 6 12 l 1 44 q 0 10 -7 10 q -7 0 -7 -10 l 1 -44 q 1 -12 6 -12 z"/>
+    <path d="M940 500 q 4 0 5 9 l 1 22 q 0 7 -6 7 q -6 0 -6 -7 l 1 -22 q 1 -9 5 -9 z"/>
+  </g>
+
+  <!-- scratches across everything -->
+  <g stroke="#050404" stroke-width="5" stroke-linecap="round" opacity="0.85">
+    <path d="M210 230 L 400 330"/>
+    <path d="M230 250 L 395 345"/>
+    <path d="M820 380 L 990 300"/>
+  </g>
+</svg>

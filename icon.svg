@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>R U N</title>
+  <defs>
+    <filter id="rough" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="7" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <radialGradient id="bg" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#2a0c0c"/><stop offset="1" stop-color="#060404"/></radialGradient>
+    <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ece6d6"/><stop offset="1" stop-color="#a39c90"/></linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="36" fill="url(#bg)"/>
+  <g filter="url(#rough)">
+    <!-- the bone-white U with the face in its bowl -->
+    <path d="M52 34 L 92 34 L 92 140 C 92 188 106 198 128 198 C 150 198 164 188 164 140 L 164 34 L 204 34 L 204 140 C 204 206 174 228 128 228 C 82 228 52 206 52 140 Z" fill="url(#bone)"/>
+    <path d="M92 34 L 164 34 L 164 140 C 164 188 150 198 128 198 C 106 198 92 188 92 140 Z" fill="#070606"/>
+    <path d="M128 42 C 108 42 99 62 99 94 C 99 134 108 170 128 176 C 148 170 157 134 157 94 C 157 62 148 42 128 42 Z" fill="url(#bone)"/>
+    <ellipse cx="116" cy="84" rx="6" ry="4" fill="#141010"/>
+    <ellipse cx="140" cy="84" rx="6" ry="4" fill="#141010"/>
+    <path d="M128 100 C 117 100 113 114 114 132 C 115 151 121 164 128 165 C 135 164 141 151 142 132 C 143 114 139 100 128 100 Z" fill="#040303"/>
+    <path d="M126 228 q 3 0 3 7 l 1 12 q 0 5 -4 5 q -4 0 -4 -5 l 1 -12 q 0 -7 3 -7 z" fill="#8a0f12"/>
+  </g>
+</svg>
