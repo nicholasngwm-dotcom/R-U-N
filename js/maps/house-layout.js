@@ -163,13 +163,26 @@ const HouseLayout = (function () {
   cells(g2, [[9, 19], [9, 22], [14, 20]], 'p');        // pillars holding the house up
   rect(g2, 20, 19, 20, 22, 'b');                       // shelves of jars and tins
   rect(g2, 3, 24, 5, 24, 'b');
-  set(g2, 20, 24, 'X'); set(g2, 10, 17, 'S'); set(g2, 3, 17, 'S');
+  set(g2, 10, 17, 'S'); set(g2, 3, 17, 'S');
   const cellar = { c0: 7, c1: 8, lowRow: 16, highRow: 14, steps: 9, rise: 0.4 };
 
   // ---------- searchable drawers + lockers on the ground floor / garden ----------
   cells(g0, [[8, 25], [1, 29], [14, 25], [16, 24], [34, 24], [11, 38], [1, 42], [22, 35], [34, 36], [29, 42], [1, 10], [34, 4]], 'S');
-  cells(g0, [[10, 25], [19, 29], [6, 42]], 'X');
-  cells(g1, [[10, 25], [34, 29], [16, 29]], 'X');
+  // lockers: how many depends on the difficulty. [grid, col, row], most important first (one per floor
+  // stays as long as there are enough lockers to go round)
+  const LOCKERS = {
+    hall0: [g0, 19, 29], hall1: [g1, 16, 29], garage: [g2, 20, 24], living: [g0, 6, 42],
+    laundry: [g0, 10, 25], nook: [g1, 10, 25], sitting: [g1, 34, 29],
+    dining: [g0, 34, 40], master: [g1, 1, 39],                       // only on easy
+  };
+  const LOCKER_SETS = {
+    nightmare: ['hall0', 'hall1'],
+    hard: ['hall0', 'hall1', 'garage', 'living'],
+    normal: ['hall0', 'hall1', 'garage', 'living', 'laundry', 'nook', 'sitting'],
+    easy: ['hall0', 'hall1', 'garage', 'living', 'laundry', 'nook', 'sitting', 'dining', 'master'],
+  };
+  const lockerSet = LOCKER_SETS[typeof Difficulty !== 'undefined' ? Difficulty.cur.lockers : 'normal'] || LOCKER_SETS.normal;
+  for (const k of lockerSet) { const [g, c, r] = LOCKERS[k]; set(g, c, r, 'X'); }
 
   // =====================================================================
   // zones: wallpaper + floor per room (landmarks for finding your way)

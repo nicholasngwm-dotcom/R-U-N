@@ -444,3 +444,94 @@ kbd {
 .link-btn { margin: 10px 0 0; background: none; border: 0; padding: 0; color: #8a867c; font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .link-btn:hover { color: #cfc9bb; }
 #screen-settings .panel { max-height: calc(100vh - 40px); overflow-y: auto; }
+
+/* wind-up torch charge (hard / nightmare) */
+#torch {
+  position: absolute; left: 50%; bottom: 58px; margin-left: -130px;
+  display: none; align-items: center; gap: 7px;
+  color: #cfc8b0; opacity: 0.75; transition: color 0.3s, opacity 0.3s;
+}
+#torch.show { display: flex; }
+#torch .torch-bar { width: 90px; height: 4px; background: rgba(255, 255, 255, 0.08); }
+#torch-fill { height: 100%; width: 100%; background: currentColor; }
+#torch.nobar .torch-bar { display: none; }
+#torch.low { color: #c8902e; opacity: 0.95; }
+#torch.empty { color: #a8322a; opacity: 1; animation: torchBlink 1s steps(2) infinite; }
+#torch.winding { color: #f0e6c0; opacity: 1; }
+@keyframes torchBlink { 50% { opacity: 0.35; } }
+
+/* difficulty screen (after START) */
+#diff-now { margin: 26px 0 0; font-size: 12px; letter-spacing: 0.25em; color: #6f6a5e; min-height: 1em; }
+#diff-now.nm { color: #a8392c; }
+.diff-wrap { width: min(860px, 100%); margin: 0 auto; }
+.diff-wrap h2 { margin: 0 0 22px; font-size: 20px; letter-spacing: 0.35em; color: #cfc9bb; font-weight: normal; }
+.diff-cols { display: flex; gap: 22px; align-items: stretch; flex-wrap: wrap; }
+.diff-list { display: flex; flex-direction: column; gap: 8px; flex: 0 0 220px; }
+.diff-list button {
+  text-align: left; font: inherit; cursor: pointer; padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.55); color: #6f6a5e; border: 1px solid #2b2924; transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.diff-list button b { display: block; font-size: 15px; letter-spacing: 0.3em; font-weight: normal; }
+.diff-list button span { display: block; margin-top: 4px; font-size: 11px; font-style: italic; }
+.diff-list button:hover { color: #b8b19c; border-color: #4a463c; }
+.diff-list button.on { color: #e8dfc4; border-color: #8a7f62; background: rgba(30, 26, 18, 0.75); }
+.diff-list button.nm.on { color: #e05a48; border-color: #7a2a22; background: rgba(40, 10, 8, 0.75); }
+.diff-detail {
+  flex: 1 1 380px; min-width: 0; padding: 18px 22px; background: rgba(0, 0, 0, 0.6); border: 1px solid #2b2924;
+  max-height: calc(100vh - 230px); overflow-y: auto;
+}
+.diff-detail h3 { margin: 0; font-size: 18px; letter-spacing: 0.35em; color: #e8dfc4; font-weight: normal; }
+.diff-detail.nm h3 { color: #e05a48; }
+.diff-detail .diff-blurb { margin: 6px 0 14px; font-size: 13px; color: #8a867c; font-style: italic; }
+.diff-warn { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.diff-warn div { padding: 8px 11px; border-left: 3px solid #a8392c; background: rgba(120, 25, 18, 0.18); color: #d8cfb8; font-size: 12.5px; line-height: 1.5; }
+.diff-warn div b { color: #f07a62; letter-spacing: 0.12em; font-weight: normal; }
+.diff-sec { margin-top: 12px; }
+.diff-sec h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.3em; color: #8a7f62; font-weight: normal; }
+.diff-sec ul { margin: 0; padding: 0 0 0 16px; color: #bdb6a2; font-size: 12.5px; line-height: 1.65; }
+.diff-sec li.worse { color: #e0a090; }
+.diff-sec li.better { color: #a8c49a; }
+.diff-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
+.diff-actions .menu-btn.small { margin-top: 0; }
+.diff-warn kbd { border: 1px solid #8a5a40; padding: 0 5px; border-radius: 2px; font-family: inherit; color: #f0d0b0; }
+.diff-detail { scrollbar-width: thin; scrollbar-color: #4a463c transparent; }
+.diff-detail::-webkit-scrollbar { width: 6px; }
+.diff-detail::-webkit-scrollbar-thumb { background: #4a463c; }
+
+/* loading screen */
+#loading {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
+  background: radial-gradient(ellipse at 50% 45%, #120c0b 0%, #050403 70%);
+  transition: opacity 0.7s ease;
+}
+#loading.done { opacity: 0; pointer-events: none; }
+#loading .ld-logo { width: min(420px, 70vw); height: auto; animation: ldFlicker 4s infinite; }
+#loading .ld-bar { width: min(320px, 60vw); height: 2px; background: rgba(255, 255, 255, 0.06); overflow: hidden; position: relative; }
+#ld-fill { height: 100%; width: 4%; background: #a8322a; box-shadow: 0 0 10px #a8322a; transition: width 0.35s ease; }
+#loading .ld-bar::after {         /* a faint glint running along the bar, so it never looks frozen */
+  content: ''; position: absolute; top: 0; bottom: 0; width: 60px; left: -60px;
+  background: linear-gradient(90deg, transparent, rgba(255, 200, 180, 0.35), transparent);
+  animation: ldGlint 1.6s linear infinite;
+}
+#ld-text { margin: 0; font-size: 12px; letter-spacing: 0.3em; text-transform: lowercase; color: #7a7266; min-height: 1.4em; text-align: center; padding: 0 16px; }
+#ld-text::after { content: ''; animation: ldDots 1.5s steps(4) infinite; }
+#loading.failed #ld-text { color: #d05a48; letter-spacing: 0.1em; }
+#loading.failed #ld-text::after, #loading.failed .ld-bar::after { animation: none; content: none; }
+@keyframes ldGlint { to { left: 100%; } }
+@keyframes ldDots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+@keyframes ldFlicker { 0%, 100% { opacity: 1; } 46% { opacity: 1; } 47% { opacity: 0.35; } 48% { opacity: 1; } 71% { opacity: 0.85; } 72% { opacity: 0.4; } 73% { opacity: 0.9; } }
+
+/* the title is the same logo art as the loading screen. The SVG has empty space around the letters, so the
+   negative margins line the letters up with the menu buttons below. */
+.title { --logo-w: min(620px, 72vw); line-height: 0; letter-spacing: 0; text-shadow: none; }
+.title.small { --logo-w: min(380px, 56vw); }
+.title-logo {
+  width: var(--logo-w); height: auto; display: block;
+  margin: calc(var(--logo-w) * -0.11) 0 calc(var(--logo-w) * -0.01) calc(var(--logo-w) * -0.18);
+  animation: titleflicker 7s infinite;
+}
+
+/* after QUIT, if the browser wouldn't close the tab: just the closed screen on black */
+body.quit { background: #000; }
+body.quit #menu { background: #000; }

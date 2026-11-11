@@ -11,8 +11,9 @@ const Game = (function () {
   const BUILD_TIME = 3.5;           // seconds holding E at the workbench to put the crank together
   const REACH = 2.3;                // how far you can interact from (m, from your eyes)
   const KEY_COUNT = 3, PART_COUNT = 3;
-  const MEDKIT_COUNT = 4;           // how many drawers hold a medkit
-  const MAX_HP = 100, MEDKIT_HEAL = 25;
+  const DIFF = typeof Difficulty !== 'undefined' ? Difficulty.cur : { medkits: 4, hp: 100, lockerOnce: false, totals: true };
+  const MEDKIT_COUNT = DIFF.medkits;  // how many drawers hold a medkit (set by the difficulty)
+  const MAX_HP = DIFF.hp, MEDKIT_HEAL = 25;
 
   // The way out is never told to you up front. The first drawer you open always holds the first note; after that
   // the clues turn up in order, one every drawer or two, until you know the whole way out.
@@ -264,13 +265,13 @@ const Game = (function () {
   // ---------- helpers ----------
   function toast(text, secs = 3.2) { ui.toast(text); toastT = secs; }
   function updateInventory() {
-    ui.setInventory({ keys: st.keys, keysUsed: st.keysUsed, keyTotal: st.know.keys ? KEY_COUNT : 0, parts: st.parts, partTotal: st.know.crank ? PART_COUNT : 0, crank: st.crank, fitted: well && well.fitted, code: st.codeKnown ? st.code : null, codeOk: st.codeOk });
+    ui.setInventory({ keys: st.keys, keysUsed: st.keysUsed, keyTotal: st.know.keys && DIFF.totals ? KEY_COUNT : 0, parts: st.parts, partTotal: st.know.crank && DIFF.totals ? PART_COUNT : 0, crank: st.crank, fitted: well && well.fitted, code: st.codeKnown ? st.code : null, codeOk: st.codeOk });
   }
   function available(it) {
     if (it.type === 'drawer') return !it.searched || (it.open > 0.8 && (it.key || it.part || it.medkit || it.note));
     if (it.type === 'exit') return !exitDoor.unlocked && it.padlocks.length > 0;
     if (it.type === 'keypad') return !st.codeOk;
-    if (it.type === 'locker') return !it.broken;
+    if (it.type === 'locker') return !it.broken && !it.spent;
     if (it.type === 'bench') return !it.done;
     if (it.type === 'well') return !it.done;
     if (it.type === 'prop') return it.alive && !it.held;
@@ -365,7 +366,7 @@ const Game = (function () {
     it.group.remove(it.medkit);
     it.medkit = null;
     st.hp = Math.min(MAX_HP, st.hp + MEDKIT_HEAL);
-    ui.setHealth(st.hp, false);
+    ui.setHealth(st.hp / MAX_HP * 100, false);
     Sfx.medkit();
     toast('You patch yourself up.  +' + MEDKIT_HEAL + ' health', 2.5);
   }
@@ -374,7 +375,7 @@ const Game = (function () {
   function damage(n, fromX, fromZ) {
     if (st.dead || st.won || st.hidden) return;
     st.hp = Math.max(0, st.hp - n);
-    ui.setHealth(st.hp, true);
+    ui.setHealth(st.hp / MAX_HP * 100, true);
     Sfx.hurt();
     let dx = player.pos.x - fromX, dz = player.pos.z - fromZ;
     const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
@@ -411,6 +412,8 @@ const Game = (function () {
     player.prevPos.copy(player.pos);
     player.vel.set(0, 0, 0);
     ui.setHidden(false);
+    // hard / nightmare: the rusted door won't latch a second time
+    if (DIFF.lockerOnce) { l.spent = true; toast("The door sticks behind you. It won't close again.", 2.6); }
   }
 
   // the entity saw you get in: it knocks the locker over, you're thrown out, and the locker is ruined for good

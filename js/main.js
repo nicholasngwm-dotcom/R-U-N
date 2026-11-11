@@ -1,5 +1,14 @@
 // Boot: renderer, input, game loop, HUD.
-(function () {
+(async function () {
+  // ---------- loading screen: the boot runs in steps, letting the page repaint between them ----------
+  const loadingEl = document.getElementById('loading');
+  const loadStep = (pct, text) => {
+    const f = document.getElementById('ld-fill'), t = document.getElementById('ld-text');
+    if (f) f.style.width = pct + '%';
+    if (t && text) t.textContent = text;
+    return new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+  };
+  await loadStep(15, 'the house is waking up');
   const canvas = document.getElementById('game');
   const menu = document.getElementById('menu');
   const startBtn = document.getElementById('start');
@@ -13,14 +22,15 @@
   const DEFAULT_BINDS = {
     forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
     sprint: ['ShiftLeft', 'ShiftRight'], crouch: ['ControlLeft', 'KeyC'], jump: ['Space', null], interact: ['KeyE', null],
-    flashlight: ['KeyF', null], respawn: ['KeyR', null], debug: ['KeyH', null], map: ['KeyM', null],
+    flashlight: ['KeyF', null], wind: ['KeyQ', null], respawn: ['KeyR', null], debug: ['KeyH', null], map: ['KeyM', null],
   };
   const BIND_NAMES = {
     forward: 'Move forward', back: 'Move back', left: 'Move left', right: 'Move right', sprint: 'Sprint (hold)', crouch: 'Crouch (hold)',
-    jump: 'Jump', interact: 'Interact / pick up (hold)', flashlight: 'Flashlight', respawn: 'Respawn', debug: 'Debug info', map: 'Debug map',
+    jump: 'Jump', interact: 'Interact / pick up (hold)', flashlight: 'Flashlight', wind: 'Wind the torch (hold · hard+)', respawn: 'Respawn', debug: 'Debug info', map: 'Debug map',
   };
   const RESERVED = ['Escape', 'Digit0', 'Digit1', 'Numpad0', 'Numpad1', 'Backspace'];      // pause, the two modes, the lock's undo
-  const settings = { sens: 3, fov: 78, fullscreen: true, map: 'house', vol: { master: 0.5, sfx: 1, music: 0.8, ambience: 1 }, binds: null };
+  const DIFF = Difficulty.cur;
+  const settings = { difficulty: Difficulty.id, sens: 3, fov: 78, fullscreen: true, rawMouse: false, map: 'house', vol: { master: 0.5, sfx: 1, music: 0.8, ambience: 1 }, binds: null };
   try {
     const saved = JSON.parse(localStorage.getItem('run-settings') || '{}');
     Object.assign(settings, saved, { vol: Object.assign({}, settings.vol, saved.vol || {}) });
@@ -28,6 +38,7 @@
   const binds = {};
   for (const a in DEFAULT_BINDS) binds[a] = (settings.binds && Array.isArray(settings.binds[a]) ? settings.binds[a] : DEFAULT_BINDS[a]).slice(0, 2);
   settings.binds = binds;
+  settings.difficulty = Difficulty.id;
   Sfx.setVolumes(settings.vol);
   const saveSettings = () => { try { localStorage.setItem('run-settings', JSON.stringify(settings)); } catch (e) {} };
 
@@ -35,11 +46,14 @@
   sensEl.value = settings.sens; fovEl.value = settings.fov; fsEl.checked = settings.fullscreen;
   const showSettings = () => {
     document.getElementById('sens-val').textContent = Number(settings.sens).toFixed(1);
-    document.getElementById('fov-val').textContent = settings.fov + '°';
+    document.getElementById('fov-val').textContent = settings.fov + '°' + (DIFF.fov ? '  (nightmare: ' + DIFF.fov + '°)' : '');
   };
   sensEl.oninput = () => { settings.sens = +sensEl.value; showSettings(); saveSettings(); };
   fovEl.oninput = () => { settings.fov = +fovEl.value; showSettings(); saveSettings(); };
   fsEl.onchange = () => { settings.fullscreen = fsEl.checked; saveSettings(); };
+  const rawEl = document.getElementById('rawmouse');
+  rawEl.checked = !!settings.rawMouse;
+  rawEl.onchange = () => { settings.rawMouse = rawEl.checked; saveSettings(); };
   showSettings();
 
   // ---------- sound sliders ----------
@@ -121,17 +135,22 @@
   scene.background = new THREE.Color(0x050608);
   scene.fog = new THREE.FogExp2(0x050608, 0.03);
 
-  const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.05, 200);
+  const fovNow = () => DIFF.fov || settings.fov;              // nightmare narrows your view
+  const camera = new THREE.PerspectiveCamera(fovNow(), window.innerWidth / window.innerHeight, 0.05, 200);
   camera.rotation.order = 'YXZ';
   scene.add(camera);
 
-  const flashlight = new THREE.SpotLight(0xfff0d8, 1.8, 32, 0.42, 0.5, 1.4);
+  // nightmare: a dimmer, narrower beam
+  const FL_MAX = DIFF.fov ? 1.35 : 1.8;
+  const flashlight = new THREE.SpotLight(0xfff0d8, FL_MAX, DIFF.fov ? 24 : 32, DIFF.fov ? 0.32 : 0.42, 0.5, 1.4);
   flashlight.position.set(0.2, -0.15, 0);
   flashlight.target.position.set(0.05, -0.2, -6);
   camera.add(flashlight, flashlight.target);
 
   Sfx.loadClips();                     // real recordings from sounds/, if any (otherwise synthesized)
+  await loadStep(30, 'building the house');
   World.build(scene, settings.map);
+  await loadStep(55, 'hiding the keys');
   Arms.init(scene);
   LedgeHint.init(scene, document.getElementById('prompt'));
   const player = new Player(World);
@@ -218,7 +237,7 @@
     win({ time, searched, total }) {
       const m = Math.floor(time / 60), s = Math.floor(time % 60);
       document.getElementById('win-stats').innerHTML =
-        `Time: ${m}:${String(s).padStart(2, '0')}<br>Drawers searched: ${searched} / ${total}`;
+        `Difficulty: ${DIFF.name}<br>Time: ${m}:${String(s).padStart(2, '0')}<br>Drawers searched: ${searched} / ${total}`;
       winEl.classList.remove('hidden');
       ui.prompt(null);
       document.exitPointerLock();
@@ -228,7 +247,9 @@
   Props.init({ world: World, scene, camera, player, game: Game });
 
   // ---------- the entity: roams the house, chases you, crawls through doorways ----------
+  await loadStep(70, 'something stirs below');
   const entity = World.mapName === 'house' ? EntityAI.create({ world: World, scene, player, game: Game }) : null;
+  if (World.mapName === 'house') Atmos.init(World.layout);      // clocks, drips, the wind, the piano... (atmosphere.js)
 
   // ---------- its sounds: heavy footsteps (heavier the closer it is), the screech, a heartbeat while it hunts you ----------
   let heartT = 0;
@@ -282,11 +303,17 @@
   function noiseMeter(dt) {
     const N = entity ? entity.tuning.noise : { slide: 5, land: 10, rummage: 10, drawer: 26 };
     let r = 0;
-    for (const ev of Game.events) if (ev.type === 'noise') r = Math.max(r, N[ev.kind] || ev.radius || 10);
+    const radius = entity ? entity.tuning.radius : ev => N[ev.kind] || ev.radius || 10;
+    for (const ev of Game.events) if (ev.type === 'noise') r = Math.max(r, radius(ev));
     if (player.sliding) r = Math.max(r, N.slide);
     if (landNoise > 0) { r = Math.max(r, landNoise); landNoise = 0; }
     let quiet = 0;                                       // footsteps: shown, but below what it listens for
-    if (player.grounded && player.hSpeed > 1 && !Game.hidden) quiet = player.sprinting ? 0.1 : player.crouching ? 0.03 : 0.06;
+    if (player.grounded && player.hSpeed > 1 && !Game.hidden) {
+      quiet = player.sprinting ? 0.1 : player.crouching ? 0.03 : 0.06;
+      // hard / nightmare: it hears your feet, so they count for real
+      const feet = player.crouching || player.sliding ? 0 : player.sprinting ? N.sprint : N.walk;
+      if (feet > 0) r = Math.max(r, feet);
+    }
     const target = Math.max(quiet, Math.min(1, r / NM_FULL));
     if (r > 0) nmRadius = Math.max(r, target >= nmLevel ? r : nmRadius);
     nmLevel = target > nmLevel ? target : Math.max(target, nmLevel - dt * 0.9);     // jumps up, falls back slowly
@@ -312,12 +339,13 @@
       deathT = 0;
       entity.startJumpscare(camera);
       Sfx.jumpscare();
-      flashlight.visible = true; flashlight.intensity = 1.8;
+      torchOn = true; flashlight.intensity = 1.8; torchDead = false;
       document.getElementById('hud').style.visibility = 'hidden';
     }
     deathT += dt;
     entity.updateJumpscare(dt);
     if (deathT > 1.6 && deadEl.classList.contains('hidden')) {
+      deadEl.querySelector('.sub').textContent = 'it found you  ·  ' + DIFF.name.toLowerCase();
       deadEl.classList.remove('hidden');
       document.exitPointerLock();
     }
@@ -379,21 +407,62 @@
     camera.getWorldDirection(camDir);
     dust.material.uniforms.camPos.value.copy(c);
     dust.material.uniforms.camDir.value.copy(camDir);
-    dust.material.uniforms.on.value = flashlight.visible ? flashlight.intensity / 1.8 : 0;
+    dust.material.uniforms.on.value = flashlight.intensity / 1.8;
+  }
+
+  // ---------- the flashlight ----------
+  // easy / normal: it never runs out (it just falters now and then).
+  // hard / nightmare: a wind-up torch. Full charge = 90 s of light; winding (hold Q) from empty to full takes
+  // 10 s, so every second of winding buys ~9 s of light. Winding is loud, slows you to a shuffle and keeps your
+  // hands busy. It dims below a quarter, sputters in its last 10 s, then dies. Switching it off (F) saves charge.
+  const TORCH_MAX = 90, WIND_FULL = 10;
+  let charge = DIFF.crankLight ? TORCH_MAX * DIFF.startCharge : TORCH_MAX;
+  let winding = false, windClickT = 0, windNoiseT = 0, torchDead = false, torchOn = true;
+  const torchEl = document.getElementById('torch'), torchFill = document.getElementById('torch-fill');
+  if (DIFF.crankLight && torchEl) { torchEl.classList.add('show'); torchEl.classList.toggle('nobar', !DIFF.chargeBar); }
+  else if (torchEl) torchEl.remove();
+  function updateTorch(dt, active) {
+    if (!DIFF.crankLight) return 1;
+    winding = active && held('wind') && !Game.hidden && !Game.typing;
+    player.slowed = winding;
+    if (winding) {
+      if (Props.holding) Props.drop();
+      input.eHeld = input.ePressed = false;      // hands busy: no searching, no picking things up
+      charge = Math.min(TORCH_MAX, charge + dt * TORCH_MAX / WIND_FULL);
+      if ((windClickT -= dt) <= 0) { Sfx.windTorch(); windClickT = 0.2; }
+      if ((windNoiseT -= dt) <= 0) {           // the monster hears it (and so does the noise meter)
+        Game.events.push({ type: 'noise', kind: 'wind', x: player.pos.x, y: player.pos.y, z: player.pos.z, radius: DIFF.noise.wind });
+        windNoiseT = 0.5;
+      }
+    } else { windClickT = 0; windNoiseT = 0; }
+    if (active && torchOn && !winding) charge = Math.max(0, charge - dt);
+    if (torchFill) torchFill.style.width = (charge / TORCH_MAX * 100).toFixed(1) + '%';
+    if (torchEl) { torchEl.classList.toggle('low', charge < TORCH_MAX * 0.25); torchEl.classList.toggle('empty', charge <= 0); torchEl.classList.toggle('winding', winding); }
+    if (charge <= 0 && !torchDead && torchOn) { torchDead = true; Sfx.burst(3000, 0.05, 0.15); Game.toast('The torch dies.  Hold [' + keyName(binds.wind[0] || binds.wind[1]) + '] to wind it.', 3); }
+    if (charge > 0) torchDead = false;
+    // brightness from the charge: full down to a quarter, then fading; sputtering in the last 10 s
+    let k = charge >= TORCH_MAX * 0.25 ? 1 : 0.35 + 0.65 * charge / (TORCH_MAX * 0.25);
+    if (charge <= 0) k = 0;
+    else if (charge < 10 && Math.random() < 0.12 + (10 - charge) * 0.03) k *= Math.random() * 0.3;
+    if (winding) k = Math.max(k * 0.7, 0.15 + 0.15 * Math.random());            // the bulb glows as you wind
+    return k;
   }
 
   // the flashlight occasionally falters for a moment
   let flickNext = 10 + Math.random() * 20, flickT = 0;
-  function updateFlashlight(dt) {
-    if (!eerie) return;
-    if (flickT > 0) {
-      flickT -= dt;
-      flashlight.intensity = Math.random() < 0.5 ? 0.15 + Math.random() * 0.3 : 1.8;
-      if (flickT <= 0) flashlight.intensity = 1.8;
-    } else if ((flickNext -= dt) <= 0) {
-      flickT = 0.25 + Math.random() * 0.6;
-      flickNext = 12 + Math.random() * 30;
+  function updateFlashlight(dt, active) {
+    const k = updateTorch(dt, active);
+    let falter = 1;
+    if (eerie) {
+      if (flickT > 0) {
+        flickT -= dt;
+        falter = Math.random() < 0.5 ? (0.15 + Math.random() * 0.3) / 1.8 : 1;
+      } else if ((flickNext -= dt) <= 0) {
+        flickT = 0.25 + Math.random() * 0.6;
+        flickNext = 12 + Math.random() * 30;
+      }
     }
+    if (!Game.dead) flashlight.intensity = torchOn ? FL_MAX * k * falter : 0;
   }
 
   // film grain: shift a noise tile around every frame
@@ -467,7 +536,7 @@
       if (isBind('jump', e.code)) input.jumpPressed = true;
       if (isBind('crouch', e.code) && !crouchHeld()) input.crouchPressed = true;
       if (isBind('respawn', e.code) && !Game.dead) { Props.drop(); Game.onRespawn(); player.reset(); }
-      if (isBind('flashlight', e.code)) flashlight.visible = !flashlight.visible;
+      if (isBind('flashlight', e.code)) torchOn = !torchOn;        // never .visible: that recompiles every material
       if (isBind('debug', e.code)) { showDebug = !showDebug; debugEl.style.display = showDebug ? '' : 'none'; }
       if (isBind('map', e.code) && mapBase) { showMap = !showMap; minimap.style.display = showMap ? 'block' : 'none'; }
     }
@@ -476,9 +545,15 @@
   window.addEventListener('keyup', (e) => { keys.delete(e.code); });
   window.addEventListener('blur', () => keys.clear());
 
+  // mouse look. Browsers sometimes report a single wild jump (when the lock starts, when the window regains
+  // focus, or a driver hiccup): anything far bigger than how the mouse has been moving lately is ignored.
+  let mouseAvg = 4, lockedAt = 0;
   document.addEventListener('mousemove', (e) => {
     if (!locked) return;
-    if (Math.abs(e.movementX) > 600 || Math.abs(e.movementY) > 600) return; // ignore browser glitches
+    if (performance.now() - lockedAt < 120) return;                       // the first moment after locking can jump
+    const mag = Math.abs(e.movementX) + Math.abs(e.movementY);
+    if (mag > 400 || (mag > 120 && mag > mouseAvg * 8 + 40)) return;      // a spike, not a real flick
+    mouseAvg += (mag - mouseAvg) * 0.2;
     const s = settings.sens * 0.0007;
     player.yaw -= e.movementX * s;
     player.pitch = Math.max(-1.55, Math.min(1.55, player.pitch - e.movementY * s));
@@ -497,7 +572,8 @@
   // ---------- pointer lock / fullscreen / pause ----------
   function lockPointer() {
     try {
-      const p = canvas.requestPointerLock({ unadjustedMovement: true }); // raw mouse input, no OS accel
+      // raw input skips Windows' pointer speed: with a high-DPI mouse that's far too fast, so it's off unless asked for
+      const p = settings.rawMouse ? canvas.requestPointerLock({ unadjustedMovement: true }) : canvas.requestPointerLock();
       if (p && p.catch) p.catch(() => canvas.requestPointerLock());
     } catch (e) { canvas.requestPointerLock(); }
   }
@@ -507,6 +583,7 @@
     main: document.getElementById('screen-main'),
     settings: document.getElementById('screen-settings'),
     quit: document.getElementById('screen-quit'),
+    difficulty: document.getElementById('screen-difficulty'),
   };
   const quitBtn = document.getElementById('btn-quit');
   const hudEl = document.getElementById('hud');
@@ -517,28 +594,137 @@
   }
   document.getElementById('btn-settings').addEventListener('click', () => showScreen('settings'));
   document.getElementById('btn-back').addEventListener('click', () => showScreen('main'));
-  document.getElementById('btn-unquit').addEventListener('click', () => showScreen('main'));
-  quitBtn.addEventListener('click', () => {
-    if (started) { location.reload(); return; }                 // pause menu: quit back to the title screen
-    window.close();                                              // only works if a script opened this tab...
-    setTimeout(() => showScreen('quit'), 150);                   // ...otherwise tell the player they can close it
-  });
+  // QUIT shuts the whole game down: sound, rendering, the graphics card's memory, fullscreen and the mouse lock.
+  // Then it closes the tab. Browsers only allow that when the player opened the game directly (the tab's history
+  // is just this page; the game never adds history entries), so otherwise a closed screen asks them to close it.
+  let quitting = false;
+  function quitGame() {
+    if (quitting) return;
+    quitting = true;
+    try { if (document.pointerLockElement) document.exitPointerLock(); } catch (e) {}
+    try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (e) {}
+    try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
+    try { Sfx.slideStop(); if (Sfx.ctx) Sfx.ctx.close(); } catch (e) {}
+    try { renderer.setAnimationLoop(null); renderer.dispose(); renderer.forceContextLoss(); } catch (e) {}
+    canvas.style.display = 'none';
+    for (const id of ['hud', 'vignette', 'grain', 'hideshade', 'hurt', 'note', 'dead', 'win']) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+    menu.classList.remove('hidden');
+    window.close();
+    setTimeout(() => { showScreen('quit'); document.body.classList.add('quit'); }, 200);    // still open: the browser said no
+  }
+  document.getElementById('btn-unquit').addEventListener('click', () => location.reload());
+  quitBtn.addEventListener('click', quitGame);
   window.addEventListener('keydown', (e) => {                    // Esc backs out of settings
-    if (!locked && e.code === 'Escape' && !screens.settings.classList.contains('hidden')) showScreen('main');
+    if (!locked && e.code === 'Escape' && (!screens.settings.classList.contains('hidden') || !screens.difficulty.classList.contains('hidden'))) showScreen('main');
   });
 
-  // title screen music: starts on the first click / key press (browsers block sound before that)
-  const menuMusic = () => { if (started) return; Sfx.init(); Sfx.menuMusicStart(); };
-  window.addEventListener('pointerdown', menuMusic);
-  window.addEventListener('keydown', menuMusic);
-
-  startBtn.addEventListener('click', () => {
+  // ---------- difficulty screen: START -> pick a level, read exactly what it changes -> BEGIN ----------
+  // The house is built for one difficulty as the page loads, so beginning on a different one reloads the page
+  // first and comes straight back to this screen (one more click on BEGIN starts it).
+  // The text is generated from the difficulty table, so it always matches the real numbers.
+  const N0 = Difficulty.LEVELS.normal;
+  const sec = s => s === 1 ? '1 second' : s + ' seconds';
+  const ft = r => r > 0 ? 'heard from ' + r + ' m' : 'silent';
+  // compared with normal: 'worse' (red) / 'better' (green) / '' (the same)
+  const cmp = (v, n, higherIsWorse) => v === n ? '' : (v > n) === higherIsWorse ? 'worse' : 'better';
+  const LOCKER_N = { easy: 9, normal: 7, hard: 4, nightmare: 2 };
+  function diffRules(L) {
+    const wind = keyName(binds.wind[0] || binds.wind[1]) || 'Q';
+    const warn = [];
+    if (L.hp <= 1) warn.push('<b>ONE HIT KILLS.</b> You have 1 health. If it touches you, you die. There are no medkits.');
+    if (L.crankLight) warn.push(`<b>WIND-UP TORCH.</b> A full charge lasts 1 min 30 s, then the torch dies. Hold <kbd>${wind}</kbd> to wind it: 10 s takes it from empty to full (each second of winding adds about 9 s of light). Winding is loud (${ft(L.noise.wind)}), slows you to a shuffle, and you can't search or carry anything while you do it. It dims below a quarter and sputters near the end. Switch it off with the flashlight key to save charge.` + (L.startCharge < 1 ? ' <b>You start with it half charged.</b>' : ''));
+    if (L.noise.walk > 0) warn.push(`<b>IT HEARS YOUR FEET.</b> Walking is ${ft(L.noise.walk)}, sprinting ${ft(L.noise.sprint)}. Only crouch-walking is silent. Watch the noise meter.`);
+    else if (L.noise.sprint > 0) warn.push(`<b>IT HEARS YOU RUN.</b> Sprinting is ${ft(L.noise.sprint)}. Walking and crouching are still silent.`);
+    if (L.lockerOnce) warn.push("<b>LOCKERS WORK ONCE.</b> Once you climb out of a locker, its door won't close again.");
+    if (L.fov) warn.push(`<b>TUNNEL VISION.</b> Your view is narrowed to ${L.fov}°, and the torch beam is dimmer and narrower.`);
+    const li = (text, c = '') => `<li class="${c}">${text}</li>`;
+    const lockers = LOCKER_N[L.lockers];
+    const sections = [
+      ['THE MONSTER', [
+        li(L.spawnDelay < 2 ? 'Already in the house. It comes up from the garage the moment you begin.' : `Comes in through the garage after ${sec(L.spawnDelay)}.`, cmp(L.spawnDelay, N0.spawnDelay, false)),
+        li(`Chases at ${L.chaseSpeed} m/s (your sprint is 9.2 m/s${L.chaseSpeed >= 9 ? ', so it almost keeps up' : ''}). Patrols at ${L.roamSpeed} m/s.`, cmp(L.chaseSpeed, N0.chaseSpeed, true)),
+        li(`Sees you within ${L.sight} m if nothing is in the way.`, cmp(L.sight, N0.sight, true)),
+        li(`Gives up a chase after losing sight of you for ${sec(L.loseTime)}.`, cmp(L.loseTime, N0.loseTime, true)),
+        li(`Searches where it heard a noise for ${sec(L.searchTime)}.`, cmp(L.searchTime, N0.searchTime, true)),
+      ]],
+      ['YOUR NOISE', [
+        li(`Opening a drawer: heard from ${L.noise.drawer} m.`, cmp(L.noise.drawer, N0.noise.drawer, true)),
+        li(`Sliding: heard from ${L.noise.slide} m. Landing hard: heard from ${L.noise.land} m.`, cmp(L.noise.slide, N0.noise.slide, true)),
+        li(`Walking: ${ft(L.noise.walk)}. Sprinting: ${ft(L.noise.sprint)}. Crouching: silent.`, cmp(L.noise.walk + L.noise.sprint, 0, true)),
+        li(L.hearing === 1 ? 'Thrown things, the well and the lock carry their normal distance.' : `Thrown things, the well and the lock carry ${L.hearing < 1 ? 'less far' : 'further'} (×${L.hearing}).`, cmp(L.hearing, 1, true)),
+      ]],
+      ['SURVIVING', [
+        li(L.hp <= 1 ? '1 health: any hit kills you.' : `${L.hp} health. A hit takes ${L.damage}, so ${Math.ceil(L.hp / L.damage)} hits kill you.`, cmp(L.damage, N0.damage, true)),
+        li(L.medkits ? `${L.medkits} medkits hidden in drawers (+25 health each).` : 'No medkits.', cmp(L.medkits, N0.medkits, false)),
+        li((lockers <= 2 ? `Only ${lockers} lockers in the whole house` : `${lockers} lockers to hide in`) + (L.lockerOnce ? ', and each works once.' : ', and you can use them again and again.'), cmp(lockers, 7, false)),
+        li(L.props >= 1 ? 'Every chair and vase is still in the house to throw as a distraction.' : `Only ${L.props >= 0.5 ? 'about half' : 'a few'} of the chairs and vases are left to throw.`, cmp(L.props, 1, false)),
+        li(L.attention === 1 ? 'A thrown thing keeps it busy for the normal time.' : `A thrown thing keeps it busy ${L.attention > 1 ? 'for longer' : 'for less time'}.`, cmp(L.attention, 1, false)),
+        li(L.stamina === 1 ? 'Normal stamina.' : `${L.stamina > 1 ? 'More' : 'Less'} stamina (${L.stamina > 1 ? '+' : '−'}${Math.round(Math.abs(L.stamina - 1) * 100)}%).`, cmp(L.stamina, 1, false)),
+      ]],
+      ['LIGHT AND HELP', [
+        li(L.crankLight ? 'Wind-up torch (see above).' : 'Your flashlight never runs out.', L.crankLight ? 'worse' : ''),
+        li(L.fov ? `View narrowed to ${L.fov}°.` : 'Field of view: your own setting.', L.fov ? 'worse' : ''),
+        li('The noise meter shows how far your noise carries.'),
+        li(L.totals ? 'Your inventory shows totals once you learn them (KEYS 1/3 and so on).' : 'No totals in your inventory. Keep count yourself.', L.totals ? '' : 'worse'),
+      ]],
+    ];
+    return {
+      warn: warn.map(w => `<div>${w}</div>`).join(''),
+      rules: sections.map(([h, items]) => `<div class="diff-sec"><h4>${h}</h4><ul>${items.join('')}</ul></div>`).join(''),
+    };
+  }
+  let pickedDiff = Difficulty.id;
+  const diffList = document.getElementById('diff-list'), diffDetail = document.querySelector('.diff-detail');
+  function showDiff(id) {
+    pickedDiff = id;
+    const L = Difficulty.LEVELS[id], r = diffRules(L);
+    for (const b of diffList.children) b.classList.toggle('on', b.dataset.id === id);
+    document.getElementById('diff-name').textContent = L.name;
+    document.getElementById('diff-blurb').textContent = L.blurb;
+    document.getElementById('diff-warn').innerHTML = r.warn;
+    document.getElementById('diff-rules').innerHTML = r.rules;
+    diffDetail.classList.toggle('nm', id === 'nightmare');
+    diffDetail.scrollTop = 0;
+  }
+  for (const id of Difficulty.ORDER) {
+    const L = Difficulty.LEVELS[id], b = document.createElement('button');
+    b.dataset.id = id; if (id === 'nightmare') b.classList.add('nm');
+    b.innerHTML = `<b>${L.name}</b><span>${L.blurb}</span>`;
+    b.addEventListener('click', () => showDiff(id));
+    diffList.appendChild(b);
+  }
+  const diffNow = document.getElementById('diff-now');
+  function beginGame() {
     Sfx.init();
     if (eerie) Sfx.ambience();
     if (settings.fullscreen && !document.fullscreenElement && document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen().catch(() => {});
     }
     lockPointer();
+  }
+  document.getElementById('btn-begin').addEventListener('click', () => {
+    if (pickedDiff !== Difficulty.id) {
+      // rebuild the house for this difficulty, then come straight back to this screen
+      settings.difficulty = pickedDiff; saveSettings();
+      try { sessionStorage.setItem('run-begin', '1'); } catch (e) {}
+      const u = new URL(location.href); u.searchParams.delete('diff');
+      location.replace(u.href);
+      return;
+    }
+    beginGame();
+  });
+  document.getElementById('btn-diff-back').addEventListener('click', () => showScreen('main'));
+  showDiff(Difficulty.id);
+  try { if (sessionStorage.getItem('run-begin')) { sessionStorage.removeItem('run-begin'); showScreen('difficulty'); } } catch (e) {}
+
+  // title screen music: starts on the first click / key press (browsers block sound before that)
+  const menuMusic = () => { if (started || quitting) return; Sfx.init(); Sfx.menuMusicStart(); };
+  window.addEventListener('pointerdown', menuMusic);
+  window.addEventListener('keydown', menuMusic);
+
+  startBtn.addEventListener('click', () => {
+    if (!started && World.mapName === 'house') { showDiff(pickedDiff); showScreen('difficulty'); return; }   // choose how bad it gets first
+    beginGame();                                                                                          // the pause menu: resume
   });
 
   // Keyboard lock lets the game receive Ctrl+W / Ctrl+S etc. instead of the browser (Chrome/Edge, fullscreen only)
@@ -550,7 +736,9 @@
 
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === canvas;
+    if (locked) { lockedAt = performance.now(); mouseAvg = 4; }
     menu.classList.toggle('hidden', locked || Game.won || Game.dead);
+    if (locked && !started) { diffNow.textContent = 'DIFFICULTY · ' + DIFF.name; diffNow.classList.toggle('nm', Difficulty.id === 'nightmare'); }
     if (locked) { started = true; Sfx.menuMusicStop(); }
     hudEl.style.visibility = locked && !Game.dead ? 'visible' : 'hidden';
     if (!locked) {
@@ -558,7 +746,7 @@
       Sfx.slideStop();
       showScreen('main');
       startBtn.textContent = 'RESUME';
-      quitBtn.textContent = 'QUIT TO MENU';
+      quitBtn.textContent = 'QUIT GAME';
     }
     last = performance.now();
     acc = 0;
@@ -566,7 +754,7 @@
 
   // Safety net if the browser still catches Ctrl+W
   window.addEventListener('beforeunload', (e) => {
-    if (locked) { e.preventDefault(); e.returnValue = ''; }
+    if (locked && !quitting) { e.preventDefault(); e.returnValue = ''; }
   });
 
   // ---------- loop ----------
@@ -593,6 +781,7 @@
   }
 
   function frame(now) {
+    if (quitting) return;                                         // shut down: no more frames
     requestAnimationFrame(frame);
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
@@ -615,7 +804,7 @@
       }
     }
 
-    player.updateCamera(camera, dt, frozen ? 1 : acc / STEP, frozen ? { side: 0 } : input, settings.fov);
+    player.updateCamera(camera, dt, frozen ? 1 : acc / STEP, frozen ? { side: 0 } : input, fovNow());
     if (camShake > 0.001) {                                       // hits and close footsteps shake the view
       const a = camShake * camShake;
       camera.rotation.x += (Math.random() - 0.5) * 0.035 * a;
@@ -624,7 +813,7 @@
       camShake = Math.max(0, camShake - dt * 2.5);
     }
     Arms.update(camera, player, dt);
-    updateFlashlight(dt);
+    updateFlashlight(dt, locked && !Game.won && !Game.dead);
     updateDust(dt);
     if (eerie) grainEl.style.backgroundPosition = `${(Math.random() * 200) | 0}px ${(Math.random() * 200) | 0}px`;
     LedgeHint.update(player, dt, locked && !frozen);
@@ -634,6 +823,7 @@
     if (entity && locked && !Game.won && !Game.dead && !monsterFrozen) entity.update(dt);
     else if (!entity || monsterFrozen) Game.events.length = 0;      // frozen: noises made now are never heard later
     if (locked || Game.dead) entitySounds(dt);
+    if (Game.dead || Game.won) Atmos.silence(); else if (locked) Atmos.update(dt, player);
     updateDeath(dt);
     HealthBar.update(dt);
     input.ePressed = false;
@@ -667,6 +857,32 @@
         `fps      ${fps.toFixed(0)}`;
     }
   }
+
+  // ---------- warm up: compile every material's shader and upload every texture now, while the loading screen
+  // is up. Otherwise the first time something appears (the house on BEGIN, the monster arriving, the jumpscare)
+  // the game freezes while the graphics card catches up. Hidden things are shown for a moment so they're included.
+  await loadStep(85, 'lighting the candles');
+  {
+    const hidden = [];
+    scene.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+    try {
+      renderer.compile(scene, camera);
+      if (renderer.initTexture) {
+        const seen = new Set();
+        scene.traverse(o => {
+          for (const m of [].concat(o.material || [])) for (const k in m) {
+            const t = m[k];
+            if (t && t.isTexture && !seen.has(t)) { seen.add(t); renderer.initTexture(t); }
+          }
+        });
+      }
+      renderer.render(scene, camera);
+    } catch (e) { console.warn('warm-up skipped', e); }
+    for (const o of hidden) o.visible = false;
+  }
+  await loadStep(100, 'ready');
+  loadingEl.classList.add('done');
+  setTimeout(() => loadingEl.remove(), 900);
 
   requestAnimationFrame(frame);
 })();

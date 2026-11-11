@@ -160,6 +160,19 @@ const Sfx = {
     this.tone(2600 + Math.random() * 800, 0.15, 0.02 + 0.04 * k, 'sine');
     this.thump(260, 0.05, 0.1 * k);
   },
+  // winding the torch: a quick run of plastic ratchet clicks over the dynamo's whine
+  windTorch() {
+    const c = this.ctx; if (!c) return;
+    for (let i = 0; i < 4; i++) {
+      this.tone(2400 + Math.random() * 900, 0.018, 0.05, 'square', i * 0.045);
+      this.burst(5000, 0.02, 0.06);
+    }
+    const t = c.currentTime, o = c.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(320, t); o.frequency.linearRampToValueAtTime(420, t + 0.18);
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 3;
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.03, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(bp); bp.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.22);
+  },
   // a vase smashing
   shatter(k = 0.7) {
     this.thump(200, 0.08, 0.3 + 0.2 * k);

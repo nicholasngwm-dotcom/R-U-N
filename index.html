@@ -8,6 +8,20 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- loading screen: shown straight away (plain HTML), until the house is built and every shader is ready -->
+  <div id="loading">
+    <img class="ld-logo" src="logo-mark.svg" alt="R U N">
+    <div class="ld-bar"><div id="ld-fill"></div></div>
+    <p id="ld-text">the house is waking up</p>
+  </div>
+  <script>
+    // anything that breaks while loading is shown on the loading screen instead of leaving it stuck
+    window.addEventListener('error', e => {
+      if (e.target && e.target !== window && e.target.tagName !== 'SCRIPT') return;     // a missing picture isn't fatal
+      const el = document.getElementById('loading'), t = document.getElementById('ld-text');
+      if (el && !el.classList.contains('done') && t) { t.textContent = 'something went wrong while loading: ' + (e.message || 'a file failed to load') + '. try refreshing.'; el.classList.add('failed'); }
+    }, true);
+  </script>
   <canvas id="game"></canvas>
   <div id="vignette"></div>
   <div id="grain"></div>
@@ -16,6 +30,10 @@
     <div id="crosshair"></div>
     <div id="prompt"></div>
     <div id="stamina"><div id="stamina-fill"></div></div>
+    <div id="torch">
+      <svg viewBox="0 0 24 24" width="15" height="15"><path d="M7 3h10l-2 6v11a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 13h4" stroke="currentColor" stroke-width="2"/></svg>
+      <div class="torch-bar"><div id="torch-fill"></div></div>
+    </div>
     <pre id="debug"></pre>
     <canvas id="minimap"></canvas>
     <div id="interact"><span id="interact-text"></span><div id="interact-bar"><div id="interact-fill"></div></div></div>
@@ -61,7 +79,7 @@
     <!-- main screen -->
     <div class="screen" id="screen-main">
       <div class="title-block">
-        <h1 class="title">R U N</h1>
+        <h1 class="title"><img class="title-logo" src="logo-mark.svg" alt="R U N"></h1>
         <p class="tagline">the house is quiet. that is how it listens.</p>
       </div>
       <nav class="main-buttons">
@@ -69,7 +87,28 @@
         <button id="btn-settings" class="menu-btn">SETTINGS</button>
         <button id="btn-quit" class="menu-btn">QUIT</button>
       </nav>
+      <p id="diff-now"></p>
       <p class="menu-foot">headphones recommended</p>
+    </div>
+
+    <!-- difficulty screen: after START, before the game begins -->
+    <div class="screen hidden" id="screen-difficulty">
+      <div class="diff-wrap">
+        <h2>HOW BADLY DO YOU WANT TO LIVE?</h2>
+        <div class="diff-cols">
+          <div class="diff-list" id="diff-list"></div>
+          <div class="diff-detail">
+            <h3 id="diff-name"></h3>
+            <p class="diff-blurb" id="diff-blurb"></p>
+            <div class="diff-warn" id="diff-warn"></div>
+            <div id="diff-rules"></div>
+          </div>
+        </div>
+        <div class="diff-actions">
+          <button id="btn-diff-back" class="menu-btn small">BACK</button>
+          <button id="btn-begin" class="menu-btn">BEGIN</button>
+        </div>
+      </div>
     </div>
 
     <!-- settings screen -->
@@ -92,6 +131,7 @@
           <input id="fov" type="range" min="60" max="105" step="1" value="78">
         </label>
         <label class="check"><input id="fs" type="checkbox" checked> Fullscreen + keyboard lock (stops Ctrl+W closing the tab)</label>
+        <label class="check"><input id="rawmouse" type="checkbox"> Raw mouse input (ignores Windows pointer speed — can be very fast with high-DPI mice)</label>
       </div>
 
       <h3>SOUND</h3>
@@ -122,6 +162,7 @@
         <div><kbd>Jump</kbd> at a ledge<span>vault over / climb on top</span></div>
         <div><kbd>Forward</kbd> into a ladder<span>climb (back = down, crouch = slide down, jump = let go)</span></div>
         <div>hold <kbd>Interact</kbd><span>search drawers · pick up a chair / vase, swing the mouse, let go to throw</span></div>
+        <div>hold <kbd>Wind</kbd><span>hard + nightmare: wind the torch (loud, slows you down)</span></div>
         <div><kbd>0-9</kbd> at the door lock<span>type the code</span></div>
         <div><kbd>0</kbd> / <kbd>1</kbd><span>mode 0: normal game · mode 1: monster frozen</span></div>
         <div>type <kbd>key</kbd><span>test: light up everything you still need</span></div>
@@ -136,17 +177,19 @@
     <!-- shown if the browser won't let the page close itself -->
     <div class="screen hidden" id="screen-quit">
       <div class="title-block">
-        <h1 class="title small">R U N</h1>
-        <p class="tagline">you can close this tab now.</p>
+        <h1 class="title small"><img class="title-logo" src="logo-mark.svg" alt="R U N"></h1>
+        <p class="tagline">the game has closed. close this tab with ctrl+w.</p>
       </div>
       <nav class="main-buttons">
-        <button id="btn-unquit" class="menu-btn">BACK TO MENU</button>
+        <button id="btn-unquit" class="menu-btn small">PLAY AGAIN</button>
       </nav>
     </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/difficulty.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/atmosphere.js"></script>
   <script src="js/world.js"></script>
   <script src="js/maps/house-layout.js"></script>
   <script src="js/maps/house.js"></script>

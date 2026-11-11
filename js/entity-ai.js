@@ -61,7 +61,19 @@ const EntityAI = (function () {
     stagger: 1.2,         // recovery after knocking it over (s)
     smashGiveUp: 15,      // can't get to the locker in this long -> gives up
     spawnDelay: 20,       // seconds into the game before it comes in through the garage
+    hearing: 1,           // other sounds (things you throw, the winch...) carry their distance times this
+    attention: 1,         // a thrown thing keeps it searching this many times as long
   };
+  // the difficulty (difficulty.js) replaces the numbers above
+  if (typeof Difficulty !== 'undefined') {
+    const D = Difficulty.cur;
+    Object.assign(T, {
+      spawnDelay: D.spawnDelay, chaseSpeed: D.chaseSpeed, roamSpeed: D.roamSpeed, alertSpeed: D.alertSpeed,
+      sightRadius: D.sight, loseTime: D.loseTime, searchTime: D.searchTime, damage: D.damage,
+      hearing: D.hearing, attention: D.attention, noise: Object.assign({}, D.noise),
+    });
+  }
+  T.radius = ev => T.noise[ev.kind] || (ev.radius || 10) * T.hearing;     // how far a game noise carries
 
   function create({ world, scene, player, game }) {
     const L = world.layout;
@@ -325,11 +337,12 @@ const EntityAI = (function () {
     function setState(s) { st.state = s; st.timer = 0; }
 
     // a sound at (x, y, z) carrying `radius` metres. Floors muffle it: height counts extra.
-    function noise(x, z, radius, y = 0) {
-      if (Math.hypot(x - st.x, z - st.z, (y - st.y) * 1.6) > radius) return;
+    function noise(x, z, radius, y = 0, kind = null) {
+      if (!(radius > 0) || Math.hypot(x - st.x, z - st.z, (y - st.y) * 1.6) > radius) return;
       if (['chase', 'smash', 'windup', 'stagger', 'attack', 'recover'].includes(st.state)) return;
       if (st.state === 'alert' && st.lastSeen && Math.hypot(x - st.lastSeen.x, z - st.lastSeen.z) < 3 && floorOfY(y) === st.lastSeen.f) return;
       st.lastSeen = { x, z, y, f: floorOfY(y) };
+      st.heardKind = kind;
       setState('alert');
       goToPos(x, z, y);
     }
@@ -433,7 +446,7 @@ const EntityAI = (function () {
 
       // --- events from the game (never shown to the player) ---
       for (const ev of game.events) {
-        if (ev.type === 'noise') noise(ev.x, ev.z, T.noise[ev.kind] || ev.radius || 10, ev.y || 0);
+        if (ev.type === 'noise') noise(ev.x, ev.z, T.radius(ev), ev.y || 0, ev.kind);
         else if (ev.type === 'hide' && st.seenT < T.seenEnter) {
           // it watched you climb in
           st.locker = ev.locker; setState('smash');
@@ -445,6 +458,11 @@ const EntityAI = (function () {
       // loud movement carries through walls
       if (!hidden) {
         if (player.sliding) noise(p.x, p.z, T.noise.slide, p.y);
+        else if (player.grounded && player.hSpeed > 1 && !player.crouching) {
+          // on the harder levels it hears your feet too (never when you sneak crouched)
+          const r = player.sprinting ? T.noise.sprint : T.noise.walk;
+          if (r > 0) noise(p.x, p.z, r, p.y, 'step');
+        }
       }
 
       st.clock += dt;
@@ -497,7 +515,7 @@ const EntityAI = (function () {
           top = T.searchSpeed;
           if (atPathEnd()) {
             st.yaw += Math.sin(st.timer * 1.7) * dt * 1.4;                 // looks around
-            if (st.timer > T.searchTime) { setState('roam'); st.wait = 0.5; st.path = null; }
+            if (st.timer > T.searchTime * (st.heardKind === 'throw' ? T.attention : 1)) { setState('roam'); st.wait = 0.5; st.path = null; }
           }
           break;
         case 'smash': {
@@ -573,6 +591,11 @@ const EntityAI = (function () {
     }
 
     // ---------- game over: its face lunges into yours ----------
+    // its two face lights exist from the start (switched off): adding lights later makes three.js recompile every
+    // material in the house, which froze the game for a moment right as the jumpscare began
+    const jsLight = new THREE.PointLight(0xffe2c8, 0, 5, 1.5), jsRed = new THREE.PointLight(0xff2010, 0, 4, 2);
+    jsLight.position.set(0, -50, 0); jsRed.position.set(0, -50, 0);
+    scene.add(jsLight, jsRed);
     let js = null;
     function startJumpscare(camera) {
       const head = ent.head;
@@ -583,11 +606,9 @@ const EntityAI = (function () {
       head.rotation.set(0, 0, 0);
       head.scale.setScalar(1.25);
       head.position.set(0, -0.2, -2.2);
-      const light = new THREE.PointLight(0xffe2c8, 3, 5, 1.5);
-      light.position.set(0.1, 0.25, -0.5);
-      const red = new THREE.PointLight(0xff2010, 1.5, 4, 2);
-      red.position.set(-0.3, -0.4, -1.2);
-      camera.add(light, red);
+      camera.add(jsLight, jsRed);              // moving them doesn't change the light count
+      jsLight.intensity = 3; jsLight.position.set(0.1, 0.25, -0.5);
+      jsRed.intensity = 1.5; jsRed.position.set(-0.3, -0.4, -1.2);
       js = { t: 0, head };
     }
     function updateJumpscare(dt) {

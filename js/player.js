@@ -81,6 +81,9 @@ const P = {
   stamRecover: 45,        // when exhausted, can't sprint until back to this
 };
 
+// difficulty: more (or less) stamina
+if (typeof Difficulty !== 'undefined') P.stamMax = Math.round(P.stamMax * Difficulty.cur.stamina);
+
 const SPAWN = { x: 0, y: 0, z: 34 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -640,7 +643,7 @@ class Player {
     this.crouching = wantCrouch || this.height < P.standHeight - 0.05;
 
     // sprint
-    this.sprinting = input.sprint && input.fwd > 0 && hasWish &&
+    this.sprinting = input.sprint && input.fwd > 0 && hasWish && !this.slowed &&
                      !this.crouching && !this.sliding && !this.exhausted;
 
     // vault / climb takes priority over a normal jump
@@ -694,6 +697,7 @@ class Player {
       if (!input.crouch || ns < P.slideEndSpeed || this.slideTime > P.slideMaxTime) this.endSlide();
     } else if (this.grounded) {
       let target = this.crouching ? P.crouchSpeed : this.sprinting ? P.sprintSpeed : P.walkSpeed;
+      if (this.slowed) target = Math.min(target, P.crouchSpeed);          // busy with both hands (winding the torch)
       if (input.fwd < 0) target *= P.backMult;
       const tx = wx * target, tz = wz * target;
       const dot = hs > 0.1 ? (this.vel.x * wx + this.vel.z * wz) / hs : 1;

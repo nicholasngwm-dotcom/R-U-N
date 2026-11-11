@@ -53,7 +53,14 @@ const Props = (function () {
     ({ world, scene, camera, player, game } = opts);
     if (!world.props || !world.props.length) return;
     mats();
-    for (const s of world.props) {
+    // harder difficulties leave fewer things lying around: keep an evenly spread share of chairs and of vases
+    const share = typeof Difficulty !== 'undefined' ? Difficulty.cur.props : 1;
+    const seen = { chair: 0, vase: 0 };
+    const kept = world.props.filter(s => {
+      const i = seen[s.type]++;
+      return Math.floor((i + 1) * share) > Math.floor(i * share) || share >= 1;
+    });
+    for (const s of kept) {
       const half = HALF[s.type];
       const m = s.type === 'chair' ? makeChair() : makeVase();
       m.rotation.y = s.yaw || 0;
@@ -321,7 +328,8 @@ const Props = (function () {
   }
 
   return {
-    init, update, grab, drop() { release(false); },
+    init, update, grab, drop() { if (holding) release(false); },
+    get holding() { return !!holding; },
     get holding() { return holding ? { type: holding.propType } : null; },
   };
 })();
