@@ -445,20 +445,27 @@ kbd {
 .link-btn:hover { color: #cfc9bb; }
 #screen-settings .panel { max-height: calc(100vh - 40px); overflow-y: auto; }
 
-/* wind-up torch charge (hard / nightmare) */
+/* wind-up torch charge (hard / nightmare): sits right above the noise meter, in the same style */
 #torch {
-  position: absolute; left: 50%; bottom: 58px; margin-left: -130px;
-  display: none; align-items: center; gap: 7px;
-  color: #cfc8b0; opacity: 0.75; transition: color 0.3s, opacity 0.3s;
+  position: absolute; left: 30px; bottom: 112px;
+  display: none; align-items: center; gap: 8px;
+  color: #d8cfae; font-size: 11px; letter-spacing: 0.2em;
+  text-shadow: 0 1px 2px #000; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
 }
 #torch.show { display: flex; }
-#torch .torch-bar { width: 90px; height: 4px; background: rgba(255, 255, 255, 0.08); }
-#torch-fill { height: 100%; width: 100%; background: currentColor; }
-#torch.nobar .torch-bar { display: none; }
-#torch.low { color: #c8902e; opacity: 0.95; }
-#torch.empty { color: #a8322a; opacity: 1; animation: torchBlink 1s steps(2) infinite; }
-#torch.winding { color: #f0e6c0; opacity: 1; }
-@keyframes torchBlink { 50% { opacity: 0.35; } }
+.tq-bar { display: flex; gap: 2px; padding: 3px; background: rgba(10, 10, 10, 0.75); border: 1px solid #3a3d40; border-radius: 2px; }
+.tq-seg { width: 12px; height: 12px; background: rgba(255, 255, 255, 0.06); transition: background 0.15s; }
+.tq-seg.on { background: #e8d9a0; box-shadow: 0 0 4px rgba(232, 217, 160, 0.5); }
+#torch.low .tq-seg.on { background: #d89a38; box-shadow: 0 0 4px rgba(216, 154, 56, 0.5); }
+#torch.crit .tq-seg.on { background: #c8402e; box-shadow: 0 0 5px rgba(200, 64, 46, 0.6); }
+#torch.nobar .tq-bar { display: none; }
+#torch.low { color: #e0a848; }
+#torch.crit, #torch.empty { color: #e85a44; }
+#torch.empty svg, #torch.crit .tq-hint { animation: torchBlink 0.9s steps(2) infinite; }
+#torch.winding { color: #fff4cc; }
+#torch.winding .tq-seg.on { background: #fff4cc; }
+.tq-hint { color: #f0c070; letter-spacing: 0.15em; }
+@keyframes torchBlink { 50% { opacity: 0.3; } }
 
 /* difficulty screen (after START) */
 #diff-now { margin: 26px 0 0; font-size: 12px; letter-spacing: 0.25em; color: #6f6a5e; min-height: 1em; }

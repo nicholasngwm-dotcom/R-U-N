@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>R U N</title>
   <link rel="icon" type="image/svg+xml" href="icon.svg">
-  <link rel="stylesheet" href="style.css?v=20261111b">
+  <link rel="stylesheet" href="style.css?v=20261112a">
 </head>
 <body>
   <!-- loading screen: shown straight away (plain HTML), until the house is built and every shader is ready -->
@@ -31,8 +31,10 @@
     <div id="prompt"></div>
     <div id="stamina"><div id="stamina-fill"></div></div>
     <div id="torch">
-      <svg viewBox="0 0 24 24" width="15" height="15"><path d="M7 3h10l-2 6v11a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 13h4" stroke="currentColor" stroke-width="2"/></svg>
-      <div class="torch-bar"><div id="torch-fill"></div></div>
+      <svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 3h10l-2 6v11a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 13h4" stroke="currentColor" stroke-width="2"/></svg>
+      <div class="tq-bar"></div>
+      <span class="tq-text">TORCH</span>
+      <span class="tq-hint"></span>
     </div>
     <pre id="debug"></pre>
     <canvas id="minimap"></canvas>
@@ -188,20 +190,20 @@
 
   <!-- ?v= on our own files: bump it with each release so browsers never mix a new page with old cached files -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="js/difficulty.js?v=20261111b"></script>
-  <script src="js/audio.js?v=20261111b"></script>
-  <script src="js/atmosphere.js?v=20261111b"></script>
-  <script src="js/world.js?v=20261111b"></script>
-  <script src="js/maps/house-layout.js?v=20261111b"></script>
-  <script src="js/maps/house.js?v=20261111b"></script>
-  <script src="js/player.js?v=20261111b"></script>
-  <script src="js/arms.js?v=20261111b"></script>
-  <script src="js/ledgehint.js?v=20261111b"></script>
-  <script src="js/healthbar.js?v=20261111b"></script>
-  <script src="js/game.js?v=20261111b"></script>
-  <script src="js/props.js?v=20261111b"></script>
-  <script src="js/entity.js?v=20261111b"></script>
-  <script src="js/entity-ai.js?v=20261111b"></script>
-  <script src="js/main.js?v=20261111b"></script>
+  <script src="js/difficulty.js?v=20261112a"></script>
+  <script src="js/audio.js?v=20261112a"></script>
+  <script src="js/atmosphere.js?v=20261112a"></script>
+  <script src="js/world.js?v=20261112a"></script>
+  <script src="js/maps/house-layout.js?v=20261112a"></script>
+  <script src="js/maps/house.js?v=20261112a"></script>
+  <script src="js/player.js?v=20261112a"></script>
+  <script src="js/arms.js?v=20261112a"></script>
+  <script src="js/ledgehint.js?v=20261112a"></script>
+  <script src="js/healthbar.js?v=20261112a"></script>
+  <script src="js/game.js?v=20261112a"></script>
+  <script src="js/props.js?v=20261112a"></script>
+  <script src="js/entity.js?v=20261112a"></script>
+  <script src="js/entity-ai.js?v=20261112a"></script>
+  <script src="js/main.js?v=20261112a"></script>
 </body>
 </html>

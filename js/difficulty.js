@@ -6,6 +6,7 @@
 const Difficulty = (function () {
   const LEVELS = {
     easy: {
+      lighting: 'full',      // full: the house's lights work | dim: rooms are dark, halls dim | dark: every lamp is dead
       name: 'EASY', blurb: 'it is slow, and half deaf',
       spawnDelay: 45, chaseSpeed: 7.4, roamSpeed: 1.8, alertSpeed: 5.2, sight: 8, loseTime: 2, searchTime: 3,
       hearing: 0.7,
@@ -16,6 +17,7 @@ const Difficulty = (function () {
       fov: null, crankLight: false, startCharge: 1, chargeBar: true, totals: true,
     },
     normal: {
+      lighting: 'full',      // full: the house's lights work | dim: rooms are dark, halls dim | dark: every lamp is dead
       name: 'NORMAL', blurb: 'the house as it was meant to be',
       spawnDelay: 20, chaseSpeed: 8.4, roamSpeed: 2.2, alertSpeed: 6.0, sight: 11, loseTime: 3, searchTime: 5,
       hearing: 1,
@@ -26,6 +28,7 @@ const Difficulty = (function () {
       fov: null, crankLight: false, startCharge: 1, chargeBar: true, totals: true,
     },
     hard: {
+      lighting: 'dim',      // full: the house's lights work | dim: rooms are dark, halls dim | dark: every lamp is dead
       name: 'HARD', blurb: 'one touch. a wind-up torch.',
       spawnDelay: 10, chaseSpeed: 8.8, roamSpeed: 2.8, alertSpeed: 6.6, sight: 13, loseTime: 5, searchTime: 8,
       hearing: 1.4,
@@ -36,6 +39,7 @@ const Difficulty = (function () {
       fov: null, crankLight: true, startCharge: 1, chargeBar: true, totals: true,
     },
     nightmare: {
+      lighting: 'dark',      // full: the house's lights work | dim: rooms are dark, halls dim | dark: every lamp is dead
       name: 'NIGHTMARE', blurb: 'it is already inside.',
       spawnDelay: 0.6, chaseSpeed: 9.0, roamSpeed: 3.4, alertSpeed: 7.2, sight: 15, loseTime: 8, searchTime: 12,
       hearing: 1.8,

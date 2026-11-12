@@ -418,9 +418,31 @@
   const TORCH_MAX = 90, WIND_FULL = 10;
   let charge = DIFF.crankLight ? TORCH_MAX * DIFF.startCharge : TORCH_MAX;
   let winding = false, windClickT = 0, windNoiseT = 0, torchDead = false, torchOn = true;
-  const torchEl = document.getElementById('torch'), torchFill = document.getElementById('torch-fill');
-  if (DIFF.crankLight && torchEl) { torchEl.classList.add('show'); torchEl.classList.toggle('nobar', !DIFF.chargeBar); }
-  else if (torchEl) torchEl.remove();
+  // the gauge above the noise meter. Hard: 10 segments + seconds of light left. Nightmare: no bar, only a rough word.
+  const torchEl = document.getElementById('torch'), TQ_SEGS = 10, tqSegs = [];
+  const tqText = torchEl && torchEl.querySelector('.tq-text'), tqHint = torchEl && torchEl.querySelector('.tq-hint');
+  if (DIFF.crankLight && torchEl) {
+    torchEl.classList.add('show'); torchEl.classList.toggle('nobar', !DIFF.chargeBar);
+    for (let i = 0; i < TQ_SEGS; i++) { const d = document.createElement('div'); d.className = 'tq-seg'; torchEl.querySelector('.tq-bar').appendChild(d); tqSegs.push(d); }
+  } else if (torchEl) torchEl.remove();
+  let tqShown = '';
+  function drawTorchGauge() {
+    const f = charge / TORCH_MAX, lit = Math.ceil(f * TQ_SEGS - 1e-6);
+    const windKey = keyName(binds.wind[0] || binds.wind[1]) || 'Q';
+    const text = winding ? 'WINDING' : !torchOn ? 'TORCH OFF' :
+      DIFF.chargeBar ? 'TORCH ' + Math.floor(charge / 60) + ':' + String(Math.floor(charge % 60)).padStart(2, '0') :
+      f <= 0 ? 'TORCH DEAD' : f < 0.12 ? 'TORCH DYING' : f < 0.3 ? 'TORCH LOW' : f < 0.7 ? 'TORCH HALF' : 'TORCH FULL';
+    const hint = winding || f >= 0.3 ? '' : 'HOLD [' + windKey + '] TO WIND';
+    const key = lit + text + hint + winding + torchOn;
+    if (key === tqShown) return;
+    tqShown = key;
+    tqSegs.forEach((s, i) => s.classList.toggle('on', i < lit));
+    tqText.textContent = text; tqHint.textContent = hint;
+    torchEl.classList.toggle('low', f < 0.3 && f >= 0.12);
+    torchEl.classList.toggle('crit', f < 0.12 && f > 0);
+    torchEl.classList.toggle('empty', f <= 0);
+    torchEl.classList.toggle('winding', winding);
+  }
   function updateTorch(dt, active) {
     if (!DIFF.crankLight) return 1;
     winding = active && held('wind') && !Game.hidden && !Game.typing;
@@ -436,8 +458,7 @@
       }
     } else { windClickT = 0; windNoiseT = 0; }
     if (active && torchOn && !winding) charge = Math.max(0, charge - dt);
-    if (torchFill) torchFill.style.width = (charge / TORCH_MAX * 100).toFixed(1) + '%';
-    if (torchEl) { torchEl.classList.toggle('low', charge < TORCH_MAX * 0.25); torchEl.classList.toggle('empty', charge <= 0); torchEl.classList.toggle('winding', winding); }
+    if (tqSegs.length) drawTorchGauge();
     if (charge <= 0 && !torchDead && torchOn) { torchDead = true; Sfx.burst(3000, 0.05, 0.15); Game.toast('The torch dies.  Hold [' + keyName(binds.wind[0] || binds.wind[1]) + '] to wind it.', 3); }
     if (charge > 0) torchDead = false;
     // brightness from the charge: full down to a quarter, then fading; sputtering in the last 10 s
@@ -631,8 +652,10 @@
   function diffRules(L) {
     const wind = keyName(binds.wind[0] || binds.wind[1]) || 'Q';
     const warn = [];
+    if (L.lighting === 'dark') warn.push('<b>THE LIGHTS ARE DEAD.</b> Every lamp in the house is out. Without your torch you are blind.');
+    else if (L.lighting === 'dim') warn.push('<b>THE ROOMS ARE DARK.</b> Only a few weak lights still work in the halls. Every room needs your torch.');
     if (L.hp <= 1) warn.push('<b>ONE HIT KILLS.</b> You have 1 health. If it touches you, you die. There are no medkits.');
-    if (L.crankLight) warn.push(`<b>WIND-UP TORCH.</b> A full charge lasts 1 min 30 s, then the torch dies. Hold <kbd>${wind}</kbd> to wind it: 10 s takes it from empty to full (each second of winding adds about 9 s of light). Winding is loud (${ft(L.noise.wind)}), slows you to a shuffle, and you can't search or carry anything while you do it. It dims below a quarter and sputters near the end. Switch it off with the flashlight key to save charge.` + (L.startCharge < 1 ? ' <b>You start with it half charged.</b>' : ''));
+    if (L.crankLight) warn.push(`<b>WIND-UP TORCH.</b> A full charge lasts 1 min 30 s, then the torch dies. Hold <kbd>${wind}</kbd> to wind it: 10 s takes it from empty to full (each second of winding adds about 9 s of light). Winding is loud (${ft(L.noise.wind)}), slows you to a shuffle, and you can't search or carry anything while you do it. It dims below a quarter and sputters near the end. Switch it off with the flashlight key to save charge. ${L.chargeBar ? 'A gauge above the noise meter shows how much light is left.' : 'Its gauge only tells you roughly: FULL, HALF, LOW, DYING.'}` + (L.startCharge < 1 ? ' <b>You start with it half charged.</b>' : ''));
     if (L.noise.walk > 0) warn.push(`<b>IT HEARS YOUR FEET.</b> Walking is ${ft(L.noise.walk)}, sprinting ${ft(L.noise.sprint)}. Only crouch-walking is silent. Watch the noise meter.`);
     else if (L.noise.sprint > 0) warn.push(`<b>IT HEARS YOU RUN.</b> Sprinting is ${ft(L.noise.sprint)}. Walking and crouching are still silent.`);
     if (L.lockerOnce) warn.push("<b>LOCKERS WORK ONCE.</b> Once you climb out of a locker, its door won't close again.");
@@ -662,6 +685,7 @@
         li(L.stamina === 1 ? 'Normal stamina.' : `${L.stamina > 1 ? 'More' : 'Less'} stamina (${L.stamina > 1 ? '+' : '−'}${Math.round(Math.abs(L.stamina - 1) * 100)}%).`, cmp(L.stamina, 1, false)),
       ]],
       ['LIGHT AND HELP', [
+        li(L.lighting === 'dark' ? 'Every lamp in the house is dead.' : L.lighting === 'dim' ? 'The rooms are dark; the halls are dimly lit.' : "The house's lamps still work (most of them).", L.lighting === 'full' ? '' : 'worse'),
         li(L.crankLight ? 'Wind-up torch (see above).' : 'Your flashlight never runs out.', L.crankLight ? 'worse' : ''),
         li(L.fov ? `View narrowed to ${L.fov}°.` : 'Field of view: your own setting.', L.fov ? 'worse' : ''),
         li('The noise meter shows how far your noise carries.'),

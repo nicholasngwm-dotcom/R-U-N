@@ -24,6 +24,9 @@ World.maps.house = function (api) {
   const isWallish = ch => '#VHWZQ'.includes(ch);
   const isOpen = ch => !isWallish(ch) && ch !== ' ';
   const OUTSIDE = { name: 'outside', wall: 'outside' };
+  // how lit the house is (difficulty.js): 'full', 'dim' (rooms dark, halls dim) or 'dark' (every lamp dead)
+  const LIT = typeof Difficulty !== 'undefined' && Difficulty.cur.lighting || 'full';
+  const lit = (full, dim, dark) => (LIT === 'dark' ? dark : LIT === 'dim' ? dim : full);
   const zoneAt = (c, r, f = F) => {
     if (f === 1 && get(c, r, 1) === ' ') return OUTSIDE;
     return L.zones.find(z => z.f === f && c >= z.c0 && c <= z.c1 && r >= z.r0 && r <= z.r1) || L.hall;
@@ -939,8 +942,8 @@ World.maps.house = function (api) {
   // =====================================================================
   scene.background = new THREE.Color(0x020304);
   scene.fog = new THREE.FogExp2(0x030405, 0.07);
-  scene.add(new THREE.HemisphereLight(0x2a3242, 0x050404, 0.09));
-  scene.add(new THREE.AmbientLight(0xffffff, 0.01));
+  scene.add(new THREE.HemisphereLight(0x2a3242, 0x050404, lit(0.09, 0.045, 0.022)));
+  scene.add(new THREE.AmbientLight(0xffffff, lit(0.01, 0.004, 0)));
   const prevTrim = api.setTrim(false);
 
   // =====================================================================
@@ -1169,7 +1172,7 @@ World.maps.house = function (api) {
       bake(g);
     }
     // a lamp glowing faintly down the steps
-    const cl = new THREE.PointLight(0xffb070, 0.45, 7, 2); cl.position.set((x0 + x1) / 2, -1.5, (dz0 + dz1) / 2); scene.add(cl);
+    const cl = new THREE.PointLight(0xffb070, lit(0.45, 0.22, 0), 7, 2); cl.position.set((x0 + x1) / 2, -1.5, (dz0 + dz1) / 2); scene.add(cl);
   }
 
   // =====================================================================
@@ -1361,7 +1364,7 @@ World.maps.house = function (api) {
     g.add(mesh(new THREE.BoxGeometry(0.22, 0.28, 0.12), darkWoodMat, 0, 1.42, 0));
     for (const s of [-1, 1]) g.add(mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.22, 8), plasterMat, s * 0.6, 1.39, 0));
     bake(g);
-    const light = new THREE.PointLight(0xff6a2a, 0.5, 6, 2);
+    const light = new THREE.PointLight(0xff6a2a, lit(0.5, 0.3, 0.16), 6, 2);      // the fire burns lower when it's harder
     light.position.set(cx(c) - dc * 0.2, Y0 + 0.4, cz(r) - dr * 0.2);
     scene.add(light);
     fires.push(light);
@@ -1522,7 +1525,7 @@ World.maps.house = function (api) {
         b.rotation.y = rnd() * 3;
       }
       // a work lamp hanging over it
-      const lamp = new THREE.PointLight(0xffd8a0, 0.7, 6, 2); lamp.position.set(x + nx * 0.2, Y0 + 2.2, z + nz * 0.2); scene.add(lamp);
+      const lamp = new THREE.PointLight(0xffd8a0, lit(0.7, 0.45, 0.25), 6, 2); lamp.position.set(x + nx * 0.2, Y0 + 2.2, z + nz * 0.2); scene.add(lamp);
       add(mesh(new THREE.ConeGeometry(0.18, 0.15, 12, 1, true), ironMat, x + nx * 0.2, 2.35, z + nz * 0.2));
       add(mesh(new THREE.SphereGeometry(0.05, 6, 4), bulbMat, x + nx * 0.2, 2.28, z + nz * 0.2));
       benchIt = api.addInteractable({
@@ -1637,7 +1640,7 @@ World.maps.house = function (api) {
       x, z, axle, rope, bucket, crank, top: 1.6, deep: 6.5, depth: 1, wound: 0, fitted: false, raised: false,
     });
     // a small lantern on the well post
-    const lantern = new THREE.PointLight(0xffb060, 0.7, 9, 2); lantern.position.set(x - 0.85, 2.1, z + 0.2); scene.add(lantern); api.addFlicker(lantern, []);
+    const lantern = new THREE.PointLight(0xffb060, lit(0.7, 0.45, 0.25), 9, 2); lantern.position.set(x - 0.85, 2.1, z + 0.2); scene.add(lantern); api.addFlicker(lantern, []);
     add(mesh(new THREE.BoxGeometry(0.14, 0.2, 0.14), brassMat, x - 0.85, 1.95, z + 0.2));
   }
   // lanterns along the garden paths + a cold glow from the moon
@@ -1645,12 +1648,12 @@ World.maps.house = function (api) {
     const x = cx(c), z = cz(r);
     add(mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.8, 6), ironMat, x, 0.9, z));
     add(mesh(new THREE.BoxGeometry(0.2, 0.26, 0.2), brassMat, x, 1.9, z));
-    const dead = rnd() < 0.34;
+    const dead = rnd() < 0.34 || LIT === 'dark';
     add(mesh(new THREE.SphereGeometry(0.05, 6, 4), dead ? deadBulbMat : bulbMat, x, 1.9, z));
-    if (!dead) { const l = new THREE.PointLight(0xffb070, 0.6, 9, 2); l.position.set(x, 1.9, z); scene.add(l); if (rnd() < 0.5) api.addFlicker(l, []); }
+    if (!dead) { const l = new THREE.PointLight(0xffb070, lit(0.6, 0.35, 0), 9, 2); l.position.set(x, 1.9, z); scene.add(l); if (rnd() < 0.5) api.addFlicker(l, []); }
   }
   for (const [c, r] of [[9, 7], [26, 7], [17.5, 13]]) {
-    const moon = new THREE.PointLight(0x6f86b8, 0.45, 22, 1.4);
+    const moon = new THREE.PointLight(0x6f86b8, lit(0.45, 0.36, 0.26), 22, 1.4);
     moon.position.set(cx(c), 7, cz(r)); scene.add(moon);
   }
   {
@@ -1674,9 +1677,16 @@ World.maps.house = function (api) {
   // =====================================================================
   // lighting: chandeliers
   // =====================================================================
+  let bulbsLeft = lit(99, 1, 0);           // basement bulbs that still work (dim: just one, dark: none)
   for (const [c, r, f, flick] of L.lights) {
     onFloor(f);
     if (f === 2) {
+      if (bulbsLeft-- <= 0) {
+        // a dead bulb on its cord
+        add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.7), sootMat, cx(c), BH - 0.35, cz(r)));
+        add(mesh(new THREE.SphereGeometry(0.06, 8, 6), deadBulbMat, cx(c), BH - 0.7, cz(r)));
+        continue;
+      }
       // a bare bulb on a cord
       const x = cx(c), z = cz(r), y = BH - 0.7;
       add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.7), sootMat, x, BH - 0.35, z));
@@ -1687,8 +1697,10 @@ World.maps.house = function (api) {
       if (flick) api.addFlicker(light, [bm]);
       continue;
     }
-    const dead = rnd() < 0.3;
-    const flicker = !dead && (flick || rnd() < 0.4);
+    // dim: the chandeliers in the rooms are dead, only the halls keep (weaker) light. dark: all of them are dead.
+    const inRoom = !zoneAt(Math.floor(c), Math.floor(r)).hall;
+    const dead = rnd() < 0.3 || LIT === 'dark' || (LIT === 'dim' && inRoom);
+    const flicker = !dead && (flick || rnd() < (LIT === 'dim' ? 0.7 : 0.4));
     const x = cx(c), z = cz(r), y = 4.2;
     const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, CE - y), brassMat);
     chain.position.set(x, (CE + y) / 2, z); add(chain);
@@ -1704,7 +1716,7 @@ World.maps.house = function (api) {
       if (flicker) scene.add(bulb); else api.addStatic(bulb);
     }
     if (dead) continue;
-    const light = new THREE.PointLight(0xffa860, 0.95, 13, 2);
+    const light = new THREE.PointLight(0xffa860, lit(0.95, 0.5, 0), lit(13, 10, 13), 2);
     light.position.set(x, Y0 + y - 0.1, z);
     scene.add(light);
     if (flicker) api.addFlicker(light, [myBulb]);
@@ -1901,7 +1913,7 @@ World.maps.house = function (api) {
     const keyLight = new THREE.PointLight(0xffd9a0, 0.25, 1.6, 2); keyLight.position.set(0, 0.1, -0.4); plate.add(keyLight);
     // porch + moonlight outside
     box(xm, -0.5, z1 + 3, dw + 3, 0.5, 6, stoneMat);
-    const moon = new THREE.PointLight(0x8fa8d8, 0.9, 14, 2);
+    const moon = new THREE.PointLight(0x8fa8d8, lit(0.9, 0.6, 0.4), 14, 2);
     moon.position.set(xm, 3, z1 + 3);
     scene.add(moon);
     api.addInteractable({
